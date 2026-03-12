@@ -10,7 +10,7 @@ tools: ['edit/createFile', 'edit/createDirectory', 'edit/editFiles', 'search', '
 | Item | Value |
 |------|-------|
 | **Purpose** | Final validation of implementation, tests, coverage, and cleanup |
-| **Input** | Completed implementation from Step 4 |
+| **Input** | Completed implementation from Step 6 |
 | **Output** | `.agent-tracking/implementation-reviews/YYYYMMDD-{{name}}-final-review.md` |
 | **Key Validations** | All tests pass, coverage met, code quality verified |
 | **Final Action** | Clean up tracking files, generate completion report |
@@ -108,6 +108,51 @@ Cross-reference with specification:
 - [ ] All NFRs addressed (or documented exceptions)
 - [ ] Acceptance criteria satisfied
 
+#### F. Acceptance Test Execution (CRITICAL)
+
+You MUST execute the acceptance test scenarios from the specification. This is the **most important validation** because unit tests validate components work in isolation, but acceptance tests validate the **complete user flow** works end-to-end.
+
+**Process**:
+1. Load the original specification from `docs/feature-specs/{{feature-name}}.md`
+2. Find the "Acceptance Test Scenarios" section
+3. Execute EACH scenario manually and document results
+
+**Acceptance Test Execution Template**:
+
+```markdown
+## Acceptance Test Execution
+
+### AT-001: {{Scenario Name from Spec}}
+**Executed**: {{YYYY-MM-DD HH:MM}}
+**Steps Performed**:
+1. {{Actual action taken}}
+2. {{Actual action taken}}
+3. {{Observed result}}
+
+**Expected**: {{From spec}}
+**Actual**: {{What actually happened}}
+**Status**: ✅ PASS | ❌ FAIL
+
+{{If FAIL}}:
+**Failure Details**: {{What went wrong}}
+**Root Cause**: {{Why it failed}}
+**Required Fix**: {{What needs to change}}
+
+### AT-002: {{Next Scenario}}
+...
+```
+
+**Why This Matters**: The shared-context feature (`$pm` syntax) passed ALL automated tests (765 tests, 83% coverage) but failed the first real usage because:
+- Unit tests validated individual components worked
+- No one actually ran: `@pm task` followed by `@ba analyze $pm`
+- Manual acceptance testing would have caught that simple commands don't record to the result store
+
+**Acceptance Test Execution Requirements**:
+- [ ] ALL acceptance scenarios from spec executed
+- [ ] Each scenario has documented steps and results
+- [ ] Any failing scenarios have root cause analysis
+- [ ] CANNOT approve unless all acceptance tests pass
+
 ### 3. Generate Final Review Report
 
 Create at `.agent-tracking/implementation-reviews/YYYYMMDD-{{task-name}}-final-review.md`:
@@ -156,6 +201,27 @@ Create at `.agent-tracking/implementation-reviews/YYYYMMDD-{{task-name}}-final-r
 - **Non-Functional Requirements**: {{X}}/{{Y}} addressed
 - **Acceptance Criteria**: {{X}}/{{Y}} satisfied
 
+### Acceptance Test Execution Results (CRITICAL)
+
+| Test ID | Scenario | Executed | Result | Notes |
+|---------|----------|----------|--------|-------|
+| AT-001 | {{scenario_name}} | {{timestamp}} | ✅/❌ | {{notes}} |
+| AT-002 | {{scenario_name}} | {{timestamp}} | ✅/❌ | {{notes}} |
+
+**Acceptance Tests Summary**:
+- **Total Scenarios**: {{X}}
+- **Passed**: {{Y}}
+- **Failed**: {{Z}}
+- **Status**: {{ALL PASS | FAILURES PRESENT}}
+
+{{If any FAILED}}:
+### Acceptance Test Failures (BLOCKING)
+| Test ID | Expected | Actual | Root Cause |
+|---------|----------|--------|------------|
+| {{id}} | {{expected}} | {{actual}} | {{cause}} |
+
+**⚠️ CANNOT APPROVE until all acceptance tests pass**
+
 ## Issues Found
 
 ### Critical (Must Fix)
@@ -181,7 +247,8 @@ Create at `.agent-tracking/implementation-reviews/YYYYMMDD-{{task-name}}-final-r
 
 ## Deployment Readiness
 
-- [ ] All tests passing
+- [ ] All unit tests passing
+- [ ] All acceptance tests passing (CRITICAL)
 - [ ] Coverage targets met
 - [ ] Code quality verified
 - [ ] No critical issues
@@ -207,7 +274,8 @@ Create at `.agent-tracking/implementation-reviews/YYYYMMDD-{{task-name}}-final-r
 ## Final Sign-off
 
 - [ ] Implementation complete and working
-- [ ] Tests comprehensive and passing
+- [ ] Unit tests comprehensive and passing
+- [ ] Acceptance tests executed and passing (CRITICAL)
 - [ ] Coverage meets targets
 - [ ] Code quality verified
 - [ ] Ready for production
@@ -234,11 +302,16 @@ You WILL provide:
    - Coverage comparison to targets
    - Code quality check results
 
-3. **Issues Found** (if any)
+3. **Acceptance Test Results** (CRITICAL)
+   - Each acceptance test scenario executed
+   - Pass/fail status for each
+   - Root cause for any failures
+
+4. **Issues Found** (if any)
    - Prioritized by severity
    - Specific remediation steps
 
-4. **Recommendation**
+5. **Recommendation**
    - Clear approve/needs-work decision
    - Next steps
    - Cleanup options
@@ -247,16 +320,20 @@ You WILL provide:
 
 **APPROVE FOR COMPLETION** when:
 * All tasks marked complete
-* All tests passing
+* All unit tests passing
+* **All acceptance tests passing** (CRITICAL - this is the primary gate)
 * Coverage meets targets
 * No linting errors
 * No critical issues
 
 **NEEDS WORK** when:
 * Tests failing
+* **Any acceptance test failing** (CRITICAL)
 * Coverage below targets
 * Critical issues found
 * Missing implementation
+
+**⚠️ IMPORTANT**: A feature that passes all unit tests but fails acceptance tests is NOT ready for approval. Acceptance tests validate the complete user experience, not just individual components.
 
 ### Cleanup Options
 
@@ -279,7 +356,8 @@ Recommended: {{option}} because {{reason}}
 Before completing review:
 
 - [ ] **Review Report Created**: `.agent-tracking/implementation-reviews/YYYYMMDD-{{name}}-final-review.md`
-- [ ] **All Tests Executed**: Test suite run with results captured
+- [ ] **All Unit Tests Executed**: Test suite run with results captured
+- [ ] **All Acceptance Tests Executed**: Each scenario from spec manually tested (CRITICAL)
 - [ ] **Coverage Measured**: Coverage report generated and compared to targets
 - [ ] **Linting Run**: Code quality checks executed
 - [ ] **Requirements Traced**: All spec requirements verified
@@ -289,7 +367,8 @@ Before completing review:
 ```
 FINAL_REVIEW_VALIDATION: PASS | FAIL
 - Review Report: CREATED | MISSING
-- Tests: X PASS / Y FAIL / Z SKIP
+- Unit Tests: X PASS / Y FAIL / Z SKIP
+- Acceptance Tests: X PASS / Y FAIL (CRITICAL)
 - Coverage: X% (target: Y%) - MET | NOT_MET
 - Linting: PASS | FAIL
 - Requirements: X/Y satisfied
@@ -308,15 +387,17 @@ Congratulations! The Spec-Driven Development workflow is complete.
 **📊 Final Summary:**
 * Specification: `docs/feature-specs/{{name}}.md`
 * Implementation: {{X}} files created/modified
-* Tests: {{Y}} tests, all passing
-* Coverage: {{Z}}%
+* Unit Tests: {{Y}} tests, all passing
+* Acceptance Tests: {{Z}}/{{Z}} scenarios passed
+* Coverage: {{W}}%
 
 **📄 Final Review:**
 * Report: `.agent-tracking/implementation-reviews/{{date}}-{{name}}-final-review.md`
 
 **✅ Quality Verified:**
 * All requirements satisfied
-* All tests passing
+* All unit tests passing
+* All acceptance tests passing ← Real user flows validated
 * Coverage targets met
 * Code quality verified
 
@@ -325,4 +406,92 @@ Congratulations! The Spec-Driven Development workflow is complete.
 ---
 
 Thank you for using the Spec-Driven Development workflow!
+```
+
+## Output Format
+
+**CRITICAL**: Your response MUST include both human-readable markdown (for logs) AND structured JSON (for validation).
+
+### Required JSON Output
+
+After your markdown report, you MUST append a JSON code block. **Place the JSON code block at the very end of your response, after all markdown content, as the final element.**
+
+```json
+{
+  "stage": "POST_REVIEW",
+  "decision": "APPROVED",
+  "all_tests_passing": true,
+  "acceptance_tests_passing": true,
+  "coverage_targets_met": true,
+  "ready_for_merge": true,
+  "blockers": [],
+  "artifacts_produced": ["post_review.md"]
+}
+```
+
+### JSON Field Requirements
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|--------------|-------------|
+| `stage` | string | Yes | "POST_REVIEW" | Stage identifier (must be exactly "POST_REVIEW") |
+| `decision` | string | Yes | "APPROVED", "NEEDS_WORK", "BLOCKED" | Final review outcome |
+| `all_tests_passing` | boolean | Yes | true, false | Whether all unit/integration tests pass |
+| `acceptance_tests_passing` | boolean | Yes | true, false | Whether all acceptance tests pass |
+| `coverage_targets_met` | boolean | No | true, false | Whether coverage meets defined targets |
+| `ready_for_merge` | boolean | No | true, false | Whether feature is ready to merge |
+| `blockers` | array | No | Array of strings | List of issues preventing approval. Use empty array `[]` when no blockers |
+| `artifacts_produced` | array | No | Array of strings | List of files created (typically `["post_review.md"]`) |
+
+### Output Structure Example
+
+Your complete response should follow this pattern:
+
+````markdown
+## Post Implementation Review: [Feature Name]
+
+[Your markdown review here...]
+
+### ✅ Feature Complete and Approved
+
+All success criteria met. Feature is ready for merge.
+
+```json
+{
+  "stage": "POST_REVIEW",
+  "decision": "APPROVED",
+  "all_tests_passing": true,
+  "acceptance_tests_passing": true,
+  "coverage_targets_met": true,
+  "ready_for_merge": true,
+  "blockers": [],
+  "artifacts_produced": ["post_review.md"]
+}
+```
+````
+
+### Decision Field Logic
+
+- Use `"decision": "APPROVED"` when all tests pass and feature meets success criteria
+- Use `"decision": "NEEDS_WORK"` when fixable issues exist (minor test failures, documentation gaps)
+- Use `"decision": "BLOCKED"` when critical issues prevent completion (acceptance tests fail, major bugs)
+- **CRITICAL**: Cannot approve if `acceptance_tests_passing: false` (workflow requirement)
+- Populate `blockers` array with specific issues when decision is not "APPROVED"
+
+### Example: Feature Needs Work
+
+```json
+{
+  "stage": "POST_REVIEW",
+  "decision": "NEEDS_WORK",
+  "all_tests_passing": true,
+  "acceptance_tests_passing": false,
+  "coverage_targets_met": true,
+  "ready_for_merge": false,
+  "blockers": [
+    "Acceptance test 2 fails: User cannot delete their own account",
+    "Documentation missing API rate limit examples",
+    "Migration script needs review for production safety"
+  ],
+  "artifacts_produced": ["post_review.md"]
+}
 ```

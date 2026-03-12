@@ -13,7 +13,7 @@ tools: ['search/usages', 'read/problems', 'web/fetch', 'web/githubRepo', 'execut
 | **Input** | Approved specification from `docs/feature-specs/{{name}}.md` |
 | **Output** | `.agent-tracking/research/YYYYMMDD-{{name}}-research.md` |
 | **Key Deliverables** | Technical approach, code patterns, test framework, implementation guidance |
-| **Next Step** | `sdd.4-determine-test-strategy.prompt.md` |
+| **Next Step** | `sdd.4-task-planner-for-feature.prompt.md` |
 
 ---
 
@@ -98,6 +98,69 @@ Use the runSubagent tool for every research task.
 ### MUST
 - MUST: Do not create any source code files are part of this process. Only create markdown specification files and JSON state files as described.
 - MUST: Follow all file path and naming conventions exactly as specified.
+
+## Entry Point Analysis (CRITICAL)
+
+Before diving into component-level research, you MUST trace ALL entry points where user input flows into the system and reaches the functionality being implemented. This prevents partial implementations that work in isolation but fail in real usage.
+
+### Entry Point Analysis Requirements
+
+You MUST document:
+
+1. **All Code Paths**: Identify every path where user input enters the system and could trigger the feature
+2. **Path Differences**: Document how different command types/inputs are handled differently
+3. **Coverage Verification**: For each entry point, explicitly state whether the proposed implementation covers it
+
+### Entry Point Analysis Template
+
+Include this section in every research document:
+
+```markdown
+## Entry Point Analysis
+
+### User Input Entry Points
+
+| Entry Point | Code Path | Reaches Feature? | Implementation Required? |
+|-------------|-----------|------------------|-------------------------|
+| {{input_type_1}} | {{file.py → function → ...}} | YES/NO | YES/NO |
+| {{input_type_2}} | {{file.py → function → ...}} | YES/NO | YES/NO |
+
+### Code Path Trace
+
+#### Entry Point 1: {{Description}}
+1. User enters: `{{example_input}}`
+2. Handled by: `{{file.py:function_name()}}` (lines X-Y)
+3. Routes to: `{{next_file.py:function()}}` (lines X-Y)
+4. Reaches: `{{feature_code}}` ✅ OR Does NOT reach feature ❌
+
+#### Entry Point 2: {{Description}}
+...
+
+### Coverage Gaps
+
+| Gap | Impact | Required Fix |
+|-----|--------|--------------|
+| {{entry_point}} not covered | {{what fails}} | {{what needs to change}} |
+
+### Implementation Scope Verification
+
+- [ ] All entry points from acceptance test scenarios are traced
+- [ ] All code paths that should trigger feature are identified
+- [ ] Coverage gaps are documented with required fixes
+```
+
+### Why Entry Point Analysis Matters
+
+**Example Failure**: The shared-context feature (`$pm` syntax) passed all unit tests but failed in real usage because:
+
+| Entry Point | Code Path | Implementation Status |
+|-------------|-----------|----------------------|
+| `@pm task &` (background) | loop.py → executor.py → manager.py | ✅ Implemented |
+| `@pm,@ba task` (multi-agent) | loop.py → executor.py → manager.py | ✅ Implemented |
+| `@pm -> @ba` (pipeline) | loop.py → executor.py → manager.py | ✅ Implemented |
+| `@pm task` (simple) | loop.py → **router.py** → sdk | ❌ **NOT IMPLEMENTED** |
+
+The simple command path (`loop.py → router.py`) never went through `executor.py` where the `$ref` functionality was implemented. This gap would have been caught with proper entry point analysis.
 
 ## Alternative Technical Scenario Analysis Framework
 
@@ -325,9 +388,7 @@ When research is complete, you WILL:
 * Share a brief highlight of critical discoveries impacting implementation.
 * Provide the exact filename and path to the research document.
 * Confirm testing strategy research is included and comprehensive.
-* Instruct the user to do the following steps:
-  1. Run **Step 4** (`sdd.4-determine-test-strategy.prompt.md`) to create formal test strategy document
-  2. After test strategy is approved, proceed to **Step 5** (`sdd.5-task-planner-for-feature.prompt.md`)
+* Instruct the user to proceed to **Step 4** (`sdd.4-task-planner-for-feature.prompt.md`) to create the implementation plan
   
 **Handoff Message Template**:
 ```markdown
@@ -347,13 +408,11 @@ Deep research is complete and documented.
 * Technical approach validated ✅
 * Code patterns documented ✅
 * Testing infrastructure researched ✅
+* Entry point analysis complete ✅
 * Implementation guidance ready ✅
 
-**➡️ Recommended Next Steps:**
-1. Run **Step 4** (`sdd.4-determine-test-strategy.prompt.md`) to create formal test strategy
-2. After test strategy approval, proceed to **Step 5** (`sdd.5-task-planner-for-feature.prompt.md`)
-
-The test strategy step will analyze this research and recommend the optimal testing approach (TDD vs Code-First) for each component.
+**➡️ Recommended Next Step:**
+Proceed to **Step 4** (`sdd.4-task-planner-for-feature.prompt.md`) to create the implementation plan based on this research.
 ```
 
 ## Output Validation Checklist (MANDATORY)
@@ -364,6 +423,7 @@ Before completing research:
 - [ ] **All Placeholders Replaced**: No `{{placeholder}}` tokens remain in document
 - [ ] **Technical Approach Documented**: Clear recommendation with rationale
 - [ ] **Code Patterns Found**: At least 2-3 example patterns from codebase or external sources
+- [ ] **Entry Point Analysis Complete**: All user input paths traced and coverage verified (CRITICAL)
 - [ ] **Test Infrastructure Researched**: Framework, patterns, coverage tools identified
 - [ ] **Line References Valid**: All `(Lines X-Y)` references point to actual content
 - [ ] **Single Recommended Approach**: Only one approach remains (alternatives removed)
@@ -375,6 +435,94 @@ RESEARCH_VALIDATION: PASS | FAIL
 - Document: CREATED | MISSING
 - Placeholders: X remaining (list if any)
 - Technical Approach: DOCUMENTED | MISSING
+- Entry Points: X traced, Y covered | INCOMPLETE
 - Test Infrastructure: RESEARCHED | INCOMPLETE
 - Implementation Ready: YES | NO
+```
+
+## Output Format
+
+**CRITICAL**: Your response MUST include both human-readable markdown (for logs) AND structured JSON (for validation).
+
+### Required JSON Output
+
+After your markdown report, you MUST append a JSON code block. **Place the JSON code block at the very end of your response, after all markdown content, as the final element.**
+
+```json
+{
+  "stage": "RESEARCH",
+  "status": "COMPLETE",
+  "artifacts_produced": ["research.md"],
+  "key_findings": [
+    "Existing authentication uses JWT tokens",
+    "Test framework is pytest with 80% coverage requirement",
+    "API endpoints follow REST conventions"
+  ],
+  "blockers": []
+}
+```
+
+### JSON Field Requirements
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|--------------|-------------|
+| `stage` | string | Yes | "RESEARCH" | Stage identifier (must be exactly "RESEARCH") |
+| `status` | string | Yes | "COMPLETE", "INCOMPLETE" | Research outcome |
+| `artifacts_produced` | array | Yes | Array of strings | List of files created (typically `["research.md"]`) |
+| `key_findings` | array | No | Array of strings | 3-7 most important technical discoveries |
+| `blockers` | array | No | Array of strings | List of issues preventing completion. Use empty array `[]` when no blockers exist |
+
+### Output Structure Example
+
+Your complete response should follow this pattern:
+
+````markdown
+## Research: [Feature Name]
+
+[Your markdown research here...]
+
+### ✅ Research Complete
+
+All technical approaches have been analyzed and documented.
+
+```json
+{
+  "stage": "RESEARCH",
+  "status": "COMPLETE",
+  "artifacts_produced": ["research.md"],
+  "key_findings": [
+    "Existing authentication uses JWT tokens",
+    "Test framework is pytest with 80% coverage requirement",
+    "API endpoints follow REST conventions"
+  ],
+  "blockers": []
+}
+```
+````
+
+### Status Field Logic
+
+- Use `"status": "COMPLETE"` when all technical research is documented and implementation approach is clear
+- Use `"status": "INCOMPLETE"` when critical technical questions remain unanswered
+- Always include `"research.md"` in `artifacts_produced` if the file was created
+- Populate `key_findings` with 3-7 most important technical discoveries
+- Populate `blockers` array with specific issues when status is "INCOMPLETE"
+
+### Example: Incomplete Research
+
+```json
+{
+  "stage": "RESEARCH",
+  "status": "INCOMPLETE",
+  "artifacts_produced": ["research.md"],
+  "key_findings": [
+    "Authentication layer exists but documentation is missing",
+    "Test infrastructure needs upgrade to support async tests"
+  ],
+  "blockers": [
+    "Unable to locate database migration scripts",
+    "Legacy API versioning strategy is undocumented",
+    "No access to staging environment for integration testing"
+  ]
+}
 ```
