@@ -24,9 +24,11 @@ Decision records (ADRs) capture major project decisions with context, rationale,
 | **Deprecated** | No longer recommended, migration in progress |
 | **Superseded** | Replaced by a newer decision (link to it) |
 
+For this repository, AI agents must default ADRs to **Proposed** unless the repository owner explicitly approves changing the status to **Accepted**.
+
 ## Naming and Storage
 
-**Location**: `decision-records/` at repository root
+**Location**: `docs/decision-records/`
 
 **Format**: `yyyy-mm-dd-title.md`
 - Date: When decision was accepted

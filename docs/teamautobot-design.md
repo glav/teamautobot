@@ -290,11 +290,11 @@ Documentation:
 
 ### 4.1 Agent Framework
 
-**Status**: 🔴 OPEN — Requires deep dive
+**Status**: 🟡 PROPOSED — Build custom runtime from composable primitives
 
-**Decision**: How do we implement the agent runtime? Build from scratch or use a framework?
+**Current proposal**: TeamAutobot should implement its core agent runtime in-repo. Lightweight libraries may be used for spikes or narrow supporting concerns, but not as the owning runtime or orchestration layer.
 
-#### Option A: Build Custom (Recommended Direction)
+#### Option A: Build Custom (Leading Direction)
 
 Build a minimal agent runtime from composable primitives.
 
@@ -316,16 +316,22 @@ Build a minimal agent runtime from composable primitives.
 - Must build tool-calling, retry logic, error handling from scratch
 - No community ecosystem of pre-built integrations
 
-**Effort estimate**: Medium-high (core runtime is small; tool integrations take time)
+**Why this is the leading direction**:
+- Best fit for TeamAutobot's need for dynamic task graphs, explicit agent lifecycles, and dynamic agent fan-out
+- Keeps event semantics, replayability, and observability first-class and repo-owned
+- Avoids coupling the system's core behavior to another framework's abstractions
+- Still allows narrow helper dependencies without handing over orchestration control
 
-#### Option B: Use a Lightweight Agent Library
+#### Option B: Use an External Agent Library or Framework
 
-Use a thin library that provides primitives without imposing workflow opinions.
+Use a library or framework that provides useful runtime capabilities without forcing TeamAutobot into the wrong orchestration model.
 
 **Candidates to evaluate**:
 - **Pydantic AI** — Type-safe agent framework, lightweight, good tool calling
 - **Mirascope** — Minimal LLM toolkit with structured outputs
 - **Instructor** — Structured output extraction (not a full agent framework)
+- **AutoGen** — Event-driven multi-agent framework with team abstractions; important prior art and still relevant for comparison
+- **Microsoft Agent Framework** — Full agent/workflow runtime with sessions, middleware, events, and graph orchestration
 - **Marvin** — Lightweight AI functions and tools
 - **smolagents (HuggingFace)** — Minimal agent framework, tool-use focused
 
@@ -338,16 +344,25 @@ Use a thin library that provides primitives without imposing workflow opinions.
 - Another dependency to manage and keep updated
 - May impose subtle constraints on agent design
 - Framework bugs become your bugs
+- Still unlikely to remove the need for custom orchestration, eventing, and lifecycle control
+- Some candidates, especially AutoGen and Microsoft Agent Framework, bring larger runtime models that may shape the system more than intended
 
-#### Option C: ~~Heavy Frameworks (LangGraph, CrewAI, AutoGen)~~
+#### Option C: ~~Heavy Frameworks (LangGraph, CrewAI)~~
 
 **Ruled out** per stakeholder direction. These impose too much opinion on workflow structure and agent interaction patterns, conflicting with our goal of emergent behavior.
 
-**Open Questions**:
-- [ ] What's the minimum viable agent loop? Prototype Option A to see effort.
-- [ ] Evaluate Pydantic AI and smolagents for fit. Do they help or constrain?
-- [ ] How do we handle tool calling across different LLM providers?
-- [ ] What's our error handling / retry strategy for failed LLM calls?
+**Position on external libraries/frameworks**:
+- **PydanticAI** remains the strongest comparison point because of structured outputs, validation, and observability
+- **smolagents** and **Mirascope** are better viewed as prototype aids than as the foundation for the runtime
+- **AutoGen** should be considered explicitly because of its event-driven runtime and historical influence, but it is likely a secondary comparison behind Microsoft Agent Framework because Microsoft positions Agent Framework as its forward path
+- **Microsoft Agent Framework** is a serious framework candidate and should be treated separately from thin helper libraries because it includes workflows, state/session handling, middleware, events, and checkpointing
+- **Marvin** and similar frameworks remain too opinionated for the architecture we want
+
+**Follow-up Questions**:
+- [ ] What is the minimum viable custom agent loop for Phase 1?
+- [ ] What abstractions must stay internal so D2 (LLM interface) can evolve independently?
+- [ ] What retry/error model belongs in the runtime versus the LLM client layer?
+- [ ] What observability and replay hooks must be present from day one?
 
 ---
 
@@ -604,7 +619,7 @@ Decisions that require deep-dive evaluation before Phase 1 can begin:
 
 | ID | Decision | Options | Status | Notes |
 |----|----------|---------|--------|-------|
-| D1 | Agent framework | Custom build vs. lightweight library | 🔴 OPEN | Prototype both; evaluate Pydantic AI, smolagents |
+| D1 | Agent framework | Custom build vs. lightweight library | 🟡 PROPOSED | Current leading direction is a custom runtime; await explicit approval after ADR revisions |
 | D2 | LLM interface | Copilot SDK vs. direct API vs. gateway | 🔴 OPEN | Depends on tool-calling requirements |
 | D3 | Event transport | In-process vs. file-based vs. broker | 🟡 LEANING | In-process + JSONL likely sufficient |
 | D4 | Context retrieval | Summaries only vs. FTS5 vs. vector | 🟡 LEANING | Hybrid (summaries + FTS5) likely sufficient |

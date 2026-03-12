@@ -2,7 +2,7 @@
 
 ## Project overview
 
-**TeamAutobot** is the v2 redesign of [TeamBot](https://github.com/glav/teamautobot) — a system that orchestrates multiple AI agents to collaboratively develop software. Where TeamBot v1 uses a linear 11-stage prompt pipeline with stateless LLM calls, TeamAutobot v2 is built around **goal-driven agent collaboration** with stateful agents, an event bus, dynamic task graphs, and hierarchical context management.
+**TeamAutobot** is the repository/project for **TeamBot v2**, the next iteration of [TeamBot](https://github.com/glav/teamautobot) — a system that orchestrates multiple AI agents to collaboratively develop software. Where TeamBot v1 uses a linear 11-stage prompt pipeline with stateless LLM calls, TeamBot v2 is built around **goal-driven agent collaboration** with stateful agents, an event bus, dynamic task graphs, and hierarchical context management.
 
 **Design reference**: `docs/teamautobot-design.md` is the authoritative design specification. Always consult it before making architectural decisions.
 
@@ -92,6 +92,7 @@ Consult `docs/teamautobot-design.md` §4 and §8 for full context on these:
 
 ### Current state (pre-v2 implementation)
 
+- `docs/decision-records/`: architecture decision records (ADRs)
 - `docs/teamautobot-design.md`: v2 design specification (authoritative)
 - `docs/sdd-objective-template.md`: objective template for defining tasks
 - `src/app.py`: placeholder entrypoint; calls `load_env()`
@@ -249,6 +250,16 @@ Templates and standards referenced by commands and instructions.
 | `standards/feature-spec-template.md` | Template for feature specification documents with progress tracking. |
 | `standards/research-feature-template.md` | Template for task research documents with implementation analysis. |
 | `standards/task-planning-template.md` | Template for task checklists with overview and implementation instructions. |
+
+## Documentation conventions
+
+- Use **TeamAutobot** as the repository/project name.
+- Use **TeamBot v2** as the product/version name for the system being designed in this repository.
+- Store all architecture decision records under `docs/decision-records/`.
+- Do not create or use a top-level `decision-records/` directory.
+- Use dated kebab-case filenames for ADRs, e.g. `docs/decision-records/2026-03-12-custom-agent-runtime.md`.
+- New or revised ADRs should default to `Proposed`.
+- Only move an ADR to `Accepted` after explicit approval from the repository owner/user.
 
 ## Testing
 
