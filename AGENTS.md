@@ -256,6 +256,8 @@ Templates and standards referenced by commands and instructions.
 - Use **TeamAutobot** as the repository/project name.
 - Use **TeamBot v2** as the product/version name for the system being designed in this repository.
 - Store all architecture decision records under `docs/decision-records/`.
+- Store repository-tracked plans under `docs/plans/`.
+- Do not keep repo-facing plans only in session artifacts or agent memory; mirror them into `docs/` for review and source control.
 - Do not create or use a top-level `decision-records/` directory.
 - Use dated kebab-case filenames for ADRs, e.g. `docs/decision-records/2026-03-12-custom-agent-runtime.md`.
 - New or revised ADRs should default to `Proposed`.

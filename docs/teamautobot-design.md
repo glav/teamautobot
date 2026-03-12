@@ -290,19 +290,21 @@ Documentation:
 
 ### 4.1 Agent Framework
 
-**Status**: 🟡 PROPOSED — Build custom runtime from composable primitives
+**Status**: 🟢 ACCEPTED — Build custom runtime from composable primitives
 
-**Current proposal**: TeamAutobot should implement its core agent runtime in-repo. Lightweight libraries may be used for spikes or narrow supporting concerns, but not as the owning runtime or orchestration layer.
+**Decision**: TeamAutobot will implement its core agent runtime in-repo. Lightweight libraries may be used for spikes or narrow supporting concerns, but not as the owning runtime or orchestration layer.
 
-#### Option A: Build Custom (Leading Direction)
+This decision covers **runtime ownership only**. Event transport (D3) and agent persistence topology (D5) remain separate open decisions.
+
+#### Option A: Build Custom (Chosen Direction)
 
 Build a minimal agent runtime from composable primitives.
 
 **Components to build**:
 - Agent loop (receive task → reason → act → emit result)
 - Tool registry (register/invoke tools per persona)
-- Memory manager (working + session memory)
-- Event bus adapter (publish/subscribe)
+- Memory/session boundary manager (storage topology still open; see D5)
+- Event bus abstraction (transport/persistence still open; see D3)
 
 **Pros**:
 - Full control over agent behavior and lifecycle
@@ -316,7 +318,7 @@ Build a minimal agent runtime from composable primitives.
 - Must build tool-calling, retry logic, error handling from scratch
 - No community ecosystem of pre-built integrations
 
-**Why this is the leading direction**:
+**Why chosen**:
 - Best fit for TeamAutobot's need for dynamic task graphs, explicit agent lifecycles, and dynamic agent fan-out
 - Keeps event semantics, replayability, and observability first-class and repo-owned
 - Avoids coupling the system's core behavior to another framework's abstractions
@@ -354,7 +356,7 @@ Use a library or framework that provides useful runtime capabilities without for
 **Position on external libraries/frameworks**:
 - **PydanticAI** remains the strongest comparison point because of structured outputs, validation, and observability
 - **smolagents** and **Mirascope** are better viewed as prototype aids than as the foundation for the runtime
-- **AutoGen** should be considered explicitly because of its event-driven runtime and historical influence, but it is likely a secondary comparison behind Microsoft Agent Framework because Microsoft positions Agent Framework as its forward path
+- **AutoGen** should be considered explicitly because of its event-driven runtime and historical influence, but it is likely a secondary comparison behind Microsoft Agent Framework because Microsoft's current migration guidance points in that direction
 - **Microsoft Agent Framework** is a serious framework candidate and should be treated separately from thin helper libraries because it includes workflows, state/session handling, middleware, events, and checkpointing
 - **Marvin** and similar frameworks remain too opinionated for the architecture we want
 
@@ -370,14 +372,15 @@ Use a library or framework that provides useful runtime capabilities without for
 
 **Status**: 🔴 OPEN — Requires deep dive
 
-**Decision**: How do agents call LLMs? Continue with Copilot SDK or go direct?
+**Decision**: How should agents call LLMs: GitHub Copilot SDK, direct provider APIs, or a gateway/abstraction layer?
 
 #### Option A: Continue with GitHub Copilot SDK
 
-**Current approach**: `github-copilot-sdk==0.1.32`
+**Repository note**: If `github-copilot-sdk==0.1.32` is present in the broader repo/tooling context, it is there to support parallel TeamBot review workflows. It is **not** part of the TeamBot v2 implementation baseline unless D2 explicitly chooses it.
 
 **Pros**:
-- Already integrated and working
+- Can reuse GitHub-authenticated access patterns and Copilot-managed model access
+- May reduce setup friction for internal/tooling-oriented workflows
 - Handles authentication via GitHub
 - Access to multiple model providers through single API
 
@@ -619,7 +622,7 @@ Decisions that require deep-dive evaluation before Phase 1 can begin:
 
 | ID | Decision | Options | Status | Notes |
 |----|----------|---------|--------|-------|
-| D1 | Agent framework | Custom build vs. lightweight library | 🟡 PROPOSED | Current leading direction is a custom runtime; await explicit approval after ADR revisions |
+| D1 | Agent framework | Custom build vs. lightweight library | 🟢 ACCEPTED | Build a custom repo-owned runtime; supporting libraries may be used behind TeamAutobot-owned interfaces |
 | D2 | LLM interface | Copilot SDK vs. direct API vs. gateway | 🔴 OPEN | Depends on tool-calling requirements |
 | D3 | Event transport | In-process vs. file-based vs. broker | 🟡 LEANING | In-process + JSONL likely sufficient |
 | D4 | Context retrieval | Summaries only vs. FTS5 vs. vector | 🟡 LEANING | Hybrid (summaries + FTS5) likely sufficient |

@@ -1,10 +1,11 @@
 # Decision Record: Build Custom Agent Runtime
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Deciders**: Repository owner, implementation agent
 - **Date**: 12 March 2026
 - **Related Docs**:
-  - [`docs/teamautobot-design.md`](../teamautobot-design.md)
+  - [`docs/teamautobot-design.md` — D1 Agent Framework](../teamautobot-design.md#41-agent-framework)
+  - [`docs/teamautobot-design.md` — Open Decision Log](../teamautobot-design.md#8-open-decision-log)
   - [`AGENTS.md`](../../AGENTS.md)
 
 ## Context
@@ -17,19 +18,19 @@ Lightweight libraries remain attractive because they can reduce boilerplate arou
 
 Microsoft Agent Framework also needs to be considered explicitly. Based on Microsoft's documentation, it is not just a small helper library: it provides agents, graph-based workflows, state/session management, middleware, events, checkpointing, and multi-agent orchestration patterns. That makes it a credible option for TeamAutobot, but also places it much closer to "adopt a framework runtime" than to "use thin primitives."
 
-AutoGen should also be considered explicitly. It is historically important in this space and introduced several influential multi-agent ideas, including GroupChat and an event-driven agent runtime. However, Microsoft now positions Microsoft Agent Framework as the successor that carries those ideas forward into a newer foundation with stronger workflow, state, and tooling support.
+AutoGen should also be considered explicitly. It is historically important in this space and introduced several influential multi-agent ideas, including GroupChat and an event-driven agent runtime. According to [Microsoft's migration guide from AutoGen to Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/migration-guide/from-autogen/), Agent Framework is the newer foundation they recommend for that ecosystem, so AutoGen is best treated here as both a live comparison point and important prior art rather than the default Microsoft-path choice.
 
 ## Decision
 
-Current proposal: TeamAutobot should implement its **core agent runtime as a custom, repo-owned set of composable primitives**.
+Decision: TeamAutobot will implement its **core agent runtime as a custom, repo-owned set of composable primitives**.
 
 The custom runtime will own:
 
-- agent lifecycle and task loop
-- agent pool and dynamic spawn/release behavior
+- agent task loop and lifecycle semantics
+- agent pool semantics and dynamic spawn/release behavior
 - tool registry and persona-based tool access
-- working and session memory boundaries
-- event bus contracts and persistence
+- working-memory and session-context boundaries
+- event schemas and bus-facing runtime interfaces
 - task graph execution and re-planning integration
 
 External libraries are still allowed, but only as **supporting dependencies**, not as the owning runtime. Examples include:
@@ -39,17 +40,48 @@ External libraries are still allowed, but only as **supporting dependencies**, n
 - retry, logging, and telemetry utilities
 - isolated spikes or comparison prototypes
 
-Current leaning is that TeamAutobot should **not** adopt PydanticAI, smolagents, Mirascope, AutoGen, Marvin, Microsoft Agent Framework, or similar libraries as the system's core runtime or orchestration layer.
+TeamAutobot will **not** adopt PydanticAI, smolagents, Mirascope, AutoGen, Marvin, Microsoft Agent Framework, or similar libraries as the system's core runtime or orchestration layer.
+
+### Decision boundaries / non-goals
+
+This ADR decides **runtime ownership only**. It does **not** choose the event transport model (D3), the agent persistence topology (D5), or the LLM interface strategy (D2).
+
+A dependency counts as a **supporting dependency** only if it stays behind TeamAutobot-owned interfaces and does **not** own any of the following:
+
+- task scheduling or task-graph execution flow
+- agent lifecycle semantics or pooling behavior
+- event schemas, event semantics, or correlation model
+- working-memory/session-context model
+- orchestration flow between agents, tools, and review loops
+
+Litmus test: if removing the dependency would require redesigning TeamAutobot's orchestration concepts rather than swapping an adapter, then that dependency is acting as an **owning runtime** and falls outside this proposal.
+
+Stateful agents in this ADR means TeamBot v2 agents have durable runtime semantics and context boundaries. It does **not** imply a decision yet on whether agents are long-lived processes, spawned per task, or use a hybrid topology; that remains D5.
+
+Similarly, event ownership here means TeamBot v2 owns its event model and runtime abstraction. It does **not** decide whether transport is in-process, file-backed, broker-based, or otherwise; that remains D3.
 
 ## Consequences
 
-If accepted, this keeps the architecture aligned with the v2 design principles. TeamAutobot retains full control over agent identity, event semantics, replay behavior, dynamic fan-out, and observability. The runtime stays understandable because the key orchestration logic lives in this repository rather than inside framework abstractions.
+This keeps the architecture aligned with the v2 design principles. TeamAutobot retains full control over agent identity, event semantics, replay behavior, dynamic fan-out, and observability. The runtime stays understandable because the key orchestration logic lives in this repository rather than inside framework abstractions.
 
 The trade-off is increased engineering responsibility. We must implement the agent loop, lifecycle management, tool invocation boundaries, retries, and tracing ourselves. That also means we need stronger tests around replayability, failure handling, and concurrency limits than a framework-backed approach might initially require.
 
-This proposal does **not** prohibit the use of libraries for narrow concerns. It only rejects handing the system's central control model to an external agent framework.
+This decision does **not** prohibit the use of libraries for narrow concerns. It only rejects handing the system's central control model to an external agent framework.
 
 ## Alternatives Considered
+
+### Comparison matrix
+
+Indicative fit against TeamBot v2's D1 decision drivers:
+
+| Option | Lifecycle control | Replayability fit | Event ownership | Dynamic fan-out fit | Coupling risk |
+|--------|-------------------|-------------------|-----------------|---------------------|---------------|
+| Custom runtime | High | High | Repo-owned | High | Low |
+| PydanticAI | Medium-high | Medium | Mostly repo-owned with custom wiring | Medium | Medium |
+| Microsoft Agent Framework | Medium | High | Framework-shaped | Medium | High |
+| AutoGen | Medium | Medium | Framework-shaped | Medium | High |
+
+This matrix is intentionally qualitative. It is meant to compare architectural fit for D1, not to judge overall framework quality.
 
 ### Use PydanticAI as the core runtime
 
@@ -61,7 +93,7 @@ It was not chosen as the core runtime because TeamAutobot still needs to own the
 
 AutoGen is a legitimate comparison point because it helped define modern multi-agent patterns and includes an event-driven core plus higher-level team abstractions. It is especially relevant to TeamAutobot because our design also cares about agent collaboration, tool use, and coordination patterns rather than just single-agent prompting.
 
-It is not the leading direction for TeamAutobot because it still represents adopting a framework-owned runtime model, and Microsoft now positions Microsoft Agent Framework as the newer foundation in that product line. If we are going to deeply evaluate a Microsoft-led framework direction, Agent Framework is likely the more current comparison target. That leaves AutoGen valuable as prior art and a reference point, but weaker as the main foundation to choose today.
+It is not the leading direction for TeamAutobot because it still represents adopting a framework-owned runtime model, and Microsoft's current guidance points evaluators toward Microsoft Agent Framework as the newer comparison target in that ecosystem. That leaves AutoGen valuable as prior art and a reference point, but weaker as the main foundation to choose today.
 
 ### Use Microsoft Agent Framework as the core runtime
 
@@ -87,8 +119,8 @@ This remains ruled out for frameworks such as LangGraph and CrewAI. Frameworks t
   - agent loop
   - agent pool
   - tool registry
-  - memory manager
-  - event bus adapter
+  - memory/session boundary manager
+  - event bus abstraction
 - Create a thin internal interface for LLM clients so D2 can be decided independently of D1.
 - Build a Phase 1 spike that proves one agent can receive a task, call a tool, emit events, and persist an artifact.
 - Add replay- and lifecycle-focused tests early so the custom runtime stays reliable as concurrency increases.
@@ -97,4 +129,4 @@ This remains ruled out for frameworks such as LangGraph and CrewAI. Frameworks t
 
 ## Notes
 
-This proposal favors long-term architectural fit over short-term implementation speed. It should remain in `Proposed` until the repository owner explicitly approves it moving to `Accepted`. If later evidence shows the custom runtime is disproportionately costly, the project can introduce narrow helper dependencies without surrendering control of the runtime itself.
+This decision favors long-term architectural fit over short-term implementation speed. It was moved to `Accepted` after explicit repository-owner approval. If later evidence shows the custom runtime is disproportionately costly, the project can introduce narrow helper dependencies without surrendering control of the runtime itself.
