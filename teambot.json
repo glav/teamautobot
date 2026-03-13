@@ -1,0 +1,89 @@
+{
+  "teambot_dir": ".teambot",
+  "default_model": "claude-sonnet-4.5",
+  "default_agent": "pm",
+  "agents": [
+    {
+      "id": "pm",
+      "persona": "project_manager",
+      "display_name": "Project Manager",
+      "parallel_capable": false,
+      "workflow_stages": [
+        "setup",
+        "planning",
+        "coordination"
+      ],
+      "model": "claude-opus-4.6-1m"
+    },
+    {
+      "id": "ba",
+      "persona": "business_analyst",
+      "display_name": "Business Analyst",
+      "parallel_capable": false,
+      "workflow_stages": [
+        "business_problem",
+        "spec"
+      ],
+      "model": "gpt-5.4"
+    },
+    {
+      "id": "writer",
+      "persona": "technical_writer",
+      "display_name": "Technical Writer",
+      "parallel_capable": false,
+      "workflow_stages": [
+        "documentation"
+      ],
+      "model": "claude-opus-4.6-1m"
+    },
+    {
+      "id": "builder-1",
+      "persona": "builder",
+      "display_name": "Builder (Primary)",
+      "parallel_capable": true,
+      "workflow_stages": [
+        "implementation",
+        "testing"
+      ],
+      "model": "claude-opus-4.6-1m"
+    },
+    {
+      "id": "builder-2",
+      "persona": "builder",
+      "display_name": "Builder (Secondary)",
+      "parallel_capable": true,
+      "workflow_stages": [
+        "implementation",
+        "testing"
+      ],
+      "model": "gpt-5.4"
+    },
+    {
+      "id": "reviewer",
+      "persona": "reviewer",
+      "display_name": "Reviewer",
+      "parallel_capable": false,
+      "workflow_stages": [
+        "review"
+      ],
+      "model": "gpt-5.4"
+    }
+  ],
+  "workflow": {
+    "stages": [
+      "setup",
+      "business_problem",
+      "spec",
+      "review",
+      "research",
+      "test_strategy",
+      "plan",
+      "implementation",
+      "test",
+      "post_review"
+    ]
+  },
+  "token_tracking": {
+    "enabled": true
+  }
+}

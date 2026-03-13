@@ -3,6 +3,8 @@
 <!-- markdownlint-disable-file -->
 # Task Checklist: {{task_name}}
 
+> Store rendered plan files for this repository under `docs/plans/` so they are reviewed and source-controlled.
+
 ## Overview
 
 {{task_overview_sentence}}
