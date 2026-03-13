@@ -1,5 +1,13 @@
 """Internal LLM client contract and test doubles for TeamAutobot."""
 
+from .azure_openai import (
+    AzureOpenAIAuthMode,
+    AzureOpenAIConfig,
+    AzureOpenAIResponsesClient,
+    normalize_azure_openai_endpoint,
+    parse_azure_openai_auth_mode,
+    resolve_azure_openai_config,
+)
 from .fake import ScriptedLLMClient
 from .types import (
     LLMClient,
@@ -14,6 +22,9 @@ from .types import (
 )
 
 __all__ = [
+    "AzureOpenAIConfig",
+    "AzureOpenAIResponsesClient",
+    "AzureOpenAIAuthMode",
     "LLMClient",
     "LLMError",
     "LLMErrorKind",
@@ -24,4 +35,7 @@ __all__ = [
     "LLMToolDefinition",
     "ModelSelection",
     "ScriptedLLMClient",
+    "normalize_azure_openai_endpoint",
+    "parse_azure_openai_auth_mode",
+    "resolve_azure_openai_config",
 ]

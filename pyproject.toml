@@ -9,6 +9,8 @@ description = "TeamAutobot runtime and CLI foundation slice"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "azure-identity>=1.21.0",
+  "openai>=1.99.1",
   "python-dotenv>=1.0.0",
 ]
 

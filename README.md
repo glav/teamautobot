@@ -28,8 +28,21 @@ cp .env-sample .env  # fill in values
 uv run python src/app.py                     # defaults to status; also accepts CLI subcommands
 uv run python -m teamautobot.cli status --json
 uv run python -m teamautobot.cli demo --json # writes a per-run artifact + events under .teambot/demo-runs/
+uv run python -m teamautobot.cli azure-openai status --json
+uv run python -m teamautobot.cli azure-openai complete --input "Say hello" --model gpt-4.1-nano --json
 uv sync --group dev                              # install dev tools
 uv run ruff check . && uv run ruff format .     # lint + format
 ```
+
+Azure OpenAI uses the v1 Responses API via the standard `openai.OpenAI` client. Configure:
+
+- `AZURE_OPENAI_ENDPOINT` as your resource endpoint (the CLI normalizes `/openai/v1/` automatically)
+- `AZURE_OPENAI_MODEL_DEPLOYMENT`
+- `AZURE_OPENAI_AUTH_MODE` as `auto`, `api_key`, or `rbac`
+- `AZURE_OPENAI_API_KEY` when using API-key auth
+
+In `auto` mode, TeamAutobot prefers API-key auth when a key is present and otherwise falls back to Microsoft Entra ID / RBAC via `DefaultAzureCredential`.
+
+Use `azure-openai status` to verify configuration locally without making a live API call.
 
 See [`AGENTS.md`](AGENTS.md) for architecture details, repo layout, coding conventions, and the `.agent/` workflow directory.
