@@ -25,9 +25,11 @@ cp .env-sample .env  # fill in values
 ## Development
 
 ```bash
-uv run python src/app.py          # current placeholder entrypoint
-uv sync --group dev               # install dev tools
-uv run ruff check . && uv run ruff format .  # lint + format
+uv run python src/app.py                     # defaults to status; also accepts CLI subcommands
+uv run python -m teamautobot.cli status --json
+uv run python -m teamautobot.cli demo --json # writes a per-run artifact + events under .teambot/demo-runs/
+uv sync --group dev                              # install dev tools
+uv run ruff check . && uv run ruff format .     # lint + format
 ```
 
 See [`AGENTS.md`](AGENTS.md) for architecture details, repo layout, coding conventions, and the `.agent/` workflow directory.

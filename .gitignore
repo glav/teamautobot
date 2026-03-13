@@ -10,5 +10,6 @@ dist
 __pycache__
 .ruff_cache/
 output
+.teambot/demo-runs/
 *.log
  git-credential-manager/

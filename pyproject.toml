@@ -1,22 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "copilotplay"
+name = "teamautobot"
 version = "0.1.0"
-description = "A small Python sandbox for Copilot/model workflows"
+description = "TeamAutobot runtime and CLI foundation slice"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
   "python-dotenv>=1.0.0",
 ]
 
+[project.scripts]
+teamautobot = "teamautobot.cli:main"
+
 [dependency-groups]
 dev = [
+  "pytest>=8.3.0",
   "ruff>=0.8.0",
 ]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -28,4 +46,4 @@ indent-style = "space"
 line-ending = "lf"
 
 [tool.uv]
-package = false
+package = true
