@@ -1,8 +1,8 @@
 # TeamAutobot
 
-The repository for **TeamBot v2** — the next iteration of [TeamBot](https://github.com/glav/teamautobot), an AI agent orchestration system where multiple specialised agents collaborate to develop software autonomously.
+The repository for **TeamAutobot**, an AI agent orchestration system intended as an evolution of [TeamBot](https://github.com/glav/teamautobot), even if the implementation becomes a complete rewrite.
 
-**TeamBot v1** used a linear 11-stage pipeline with stateless LLM calls. **TeamBot v2** replaces that with goal-driven collaboration: stateful agents, a dynamic task graph, an event bus for inter-agent communication, and hierarchical context management.
+**TeamBot v1** used a linear 11-stage pipeline with stateless LLM calls. **TeamAutobot** replaces that with goal-driven collaboration: stateful agents, a dynamic task graph, an event bus for inter-agent communication, and hierarchical context management.
 
 See [`docs/teamautobot-design.md`](docs/teamautobot-design.md) for the full design specification.
 

@@ -1,8 +1,10 @@
-# TeamBot v2 — Redesign Specification
+# TeamAutobot — Design Specification
 
 **Status**: DRAFT — Awaiting technology deep dives
 **Author**: PM Agent
 **Created**: 2026-03-12
+
+**Naming note**: **TeamAutobot** is the formal product/system name. **TeamBot v2** is only informal shorthand for the intended evolution from TeamBot.
 
 ---
 
@@ -10,7 +12,7 @@
 
 TeamBot v1 achieves its stated goal — orchestrating multiple AI agents to develop software — but does so via a **linear prompt pipeline** that limits agent autonomy, prevents real collaboration, and cannot adapt to unexpected findings. The agents are stateless LLM calls, not autonomous participants.
 
-TeamBot v2 redesigns the system around **goal-driven agent collaboration** where agents are stateful, tool-wielding participants that communicate, negotiate, and adapt — while the orchestrator sets objectives and constraints rather than micromanaging execution.
+TeamAutobot redesigns the original TeamBot approach around **goal-driven agent collaboration** where agents are stateful, tool-wielding participants that communicate, negotiate, and adapt — while the orchestrator sets objectives and constraints rather than micromanaging execution.
 
 ### What Changes
 
@@ -51,6 +53,21 @@ These principles guide every architectural decision in v2:
 6. **Observability over opacity** — Every agent action, decision, and communication is traceable. You can understand _why_ the system did what it did.
 
 7. **Minimal viable framework** — Build only what's needed. Avoid heavy frameworks that impose their own opinions. Prefer composable primitives.
+
+8. **Sustainable design over short-term convenience** — Implement the system with clear responsibilities, composable abstractions, and pragmatic SOLID-style boundaries so components stay testable, swappable, and maintainable over time.
+
+9. **Harnessability over hidden interaction** — If a capability exists in an interactive flow, it should also be invocable non-interactively via CLI or batch entrypoints with output that is easy for humans and agents to verify.
+
+### 2.1 Implementation Design Guardrails
+
+These architectural principles should also shape the code-level design:
+
+- Prefer **single-responsibility** modules, classes, and functions.
+- Apply **SOLID principles pragmatically**, especially around dependency inversion and interface boundaries.
+- Keep high-level orchestration independent from low-level transport, provider, persistence, and tool-integration details.
+- Favor **composition over inheritance** and adapters over special-case branching.
+- Design components so open decisions (for example D2, D3, and D5) can change behind stable internal interfaces.
+- Design interactive capabilities as thin layers over scriptable command surfaces so the same behavior can be exercised in REPL, CLI, automation, and tests.
 
 ---
 
@@ -370,13 +387,17 @@ Use a library or framework that provides useful runtime capabilities without for
 
 ### 4.2 LLM Interface
 
-**Status**: 🔴 OPEN — Requires deep dive
+**Status**: 🟢 ACCEPTED — Use a TeamAutobot-owned interface with direct provider adapters
 
-**Decision**: How should agents call LLMs: GitHub Copilot SDK, direct provider APIs, or a gateway/abstraction layer?
+**Decision**: TeamAutobot will define its own internal LLM client interface and initially back it with direct provider SDK adapters. GitHub Copilot SDK and gateway products remain valid integrations behind that interface, but are not the default implementation baseline.
 
-#### Option A: Continue with GitHub Copilot SDK
+This decision covers **LLM interface ownership and initial integration direction only**. It does **not** yet decide the default provider/model mix or whether a gateway will be needed later.
 
-**Repository note**: If `github-copilot-sdk==0.1.32` is present in the broader repo/tooling context, it is there to support parallel TeamBot review workflows. It is **not** part of the TeamBot v2 implementation baseline unless D2 explicitly chooses it.
+Boundary: adapters should translate provider-native requests/responses and normalize provider failures into a TeamAutobot error shape, while retry/backoff policy, timeout budgets, cancellation, and orchestration decisions remain runtime-owned.
+
+#### Option A: Use GitHub Copilot SDK as the primary interface
+
+**Repository note**: If `github-copilot-sdk==0.1.32` is present in the broader repo/tooling context, it is there to support parallel TeamBot review workflows. It is **not** part of the TeamAutobot implementation baseline under the accepted D2 decision.
 
 **Pros**:
 - Can reuse GitHub-authenticated access patterns and Copilot-managed model access
@@ -390,22 +411,29 @@ Use a library or framework that provides useful runtime capabilities without for
 - May limit tool-calling capabilities vs. direct API
 - Dependency on GitHub infrastructure
 
-#### Option B: Direct LLM Provider APIs
+#### Option B: Direct provider SDKs behind a TeamAutobot-owned interface (Accepted Direction)
 
-Use provider SDKs directly (Anthropic, OpenAI, etc.)
+Use provider SDKs directly (Anthropic, OpenAI, etc.) behind a TeamAutobot-owned internal client interface.
 
 **Pros**:
 - Full access to latest features (tool calling, structured output, streaming)
 - No intermediary SDK version constraints
 - Better error messages and debugging
 - Provider-specific optimizations
+- Strongest fit with the accepted D1 custom-runtime decision
 
 **Cons**:
 - Must manage multiple provider integrations
 - Authentication per provider
 - More configuration complexity
 
-#### Option C: LLM Gateway / Abstraction
+**Phase 1 guardrail**:
+- Validate one concrete provider adapter first
+- Treat tool calling as mandatory for the Phase 1 contract
+- Treat streaming as optional unless the first implementation proves it is necessary
+- Do not generalize for multi-provider routing until a second provider requirement is explicit
+
+#### Option C: LLM Gateway / Abstraction as the primary interface
 
 Use a thin abstraction (e.g., LiteLLM, custom interface) over multiple providers.
 
@@ -417,12 +445,13 @@ Use a thin abstraction (e.g., LiteLLM, custom interface) over multiple providers
 **Cons**:
 - Another dependency
 - Abstraction may lag behind provider features
+- Can become the de facto product interface unless kept behind TeamAutobot-owned adapters
 
-**Open Questions**:
-- [ ] Does the Copilot SDK support tool calling / function calling well enough for v2?
-- [ ] What's the Copilot SDK roadmap? Is it actively maintained?
-- [ ] Do we need streaming responses for agent interaction?
-- [ ] What's our model strategy? Single provider or multi-provider?
+**Implementation follow-ups**:
+- [ ] Which concrete provider should be the first validated adapter?
+- [ ] What is the minimum normalized error surface the runtime needs?
+- [ ] Should streaming stay optional in Phase 1 or become a required contract feature?
+- [ ] At what point would gateway concerns justify adding LiteLLM or a similar layer behind the interface?
 
 ---
 
@@ -550,6 +579,8 @@ Events appended to a JSONL file. Agents poll or use file watchers.
 - **Event log viewer**: Inspect the event bus history
 - **Intervention mode**: Human can pause, redirect, or override agents
 - **Replay mode**: Re-run from any point in the event log
+- **Harness-first command surfaces**: Features exposed interactively should also be callable via explicit CLI commands or batch inputs
+- **Verification-friendly output**: Commands should provide output that is easy to inspect manually and easy for agents/tests to assert against
 
 ---
 
@@ -623,7 +654,7 @@ Decisions that require deep-dive evaluation before Phase 1 can begin:
 | ID | Decision | Options | Status | Notes |
 |----|----------|---------|--------|-------|
 | D1 | Agent framework | Custom build vs. lightweight library | 🟢 ACCEPTED | Build a custom repo-owned runtime; supporting libraries may be used behind TeamAutobot-owned interfaces |
-| D2 | LLM interface | Copilot SDK vs. direct API vs. gateway | 🔴 OPEN | Depends on tool-calling requirements |
+| D2 | LLM interface | Copilot SDK vs. direct API vs. gateway | 🟢 ACCEPTED | TeamAutobot-owned interface with direct provider adapters; Copilot SDK and gateways remain optional integrations |
 | D3 | Event transport | In-process vs. file-based vs. broker | 🟡 LEANING | In-process + JSONL likely sufficient |
 | D4 | Context retrieval | Summaries only vs. FTS5 vs. vector | 🟡 LEANING | Hybrid (summaries + FTS5) likely sufficient |
 | D5 | Agent persistence | Long-lived processes vs. spawn-per-task | 🔴 OPEN | Affects memory model and resource usage |
@@ -644,6 +675,7 @@ v2 is successful when:
 5. **Resumability**: System can resume from any point after interruption
 6. **Quality**: Output quality meets or exceeds v1 for equivalent objectives
 7. **Flexibility**: New persona or workflow pattern can be added without modifying core framework
+8. **Harnessability**: Any meaningful feature available in interactive mode can also be invoked via CLI or batch mode with output suitable for automated verification
 
 ---
 
