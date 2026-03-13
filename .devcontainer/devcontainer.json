@@ -7,6 +7,8 @@
                 "files.insertFinalNewline": true,
                 "files.trimTrailingWhitespace": true,
                 "editor.tabSize": 2,
+                "python.terminal.activateEnvInCurrentTerminal": false,
+                "python.terminal.activateEnvironment": false,
                 "json.schemas": [
                     {
                         "fileMatch": [
@@ -39,7 +41,7 @@
             "moby": false
         },
         "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
-        "ghcr.io/devcontainers/features/azure-cli:1.2.5": {},
+        "ghcr.io/devcontainers/features/azure-cli:1.2.9": {},
         "ghcr.io/devcontainers/features/copilot-cli:latest": {}
 
 

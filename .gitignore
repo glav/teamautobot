@@ -8,7 +8,9 @@ localdata
 node_modules
 dist
 __pycache__
+*.egg-info/
 .ruff_cache/
 output
+.teambot/demo-runs/
 *.log
  git-credential-manager/
