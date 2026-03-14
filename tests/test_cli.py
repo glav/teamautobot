@@ -14,6 +14,12 @@ from teamautobot.llm import (
     LLMResponse,
     LLMResult,
 )
+from teamautobot.planner import demo as planner_demo
+
+
+def test_default_runtime_output_dirs_use_teamautobot_name() -> None:
+    assert cli.DEFAULT_DEMO_OUTPUT_DIR == Path(".teamautobot/demo-runs")
+    assert planner_demo.DEFAULT_OUTPUT_DIR == Path(".teamautobot/planner-runs")
 
 
 def test_status_json(capsys) -> None:
@@ -193,3 +199,73 @@ def test_azure_openai_complete_json_returns_success_payload(monkeypatch, capsys)
     assert payload["provider"] == "azure_openai"
     assert payload["model"] == "gpt-4.1-nano"
     assert payload["text"] == "Hello from Azure OpenAI"
+
+
+def test_planner_demo_json_writes_plan_summary_and_task_artifacts(tmp_path: Path, capsys) -> None:
+    exit_code = main(["planner", "demo", "--json", "--output-dir", str(tmp_path)])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert set(payload) == {
+        "artifact_paths",
+        "blocked_task_ids",
+        "completed_task_ids",
+        "event_log_path",
+        "failed_task_ids",
+        "plan_path",
+        "run_dir",
+        "scenario_name",
+        "schema_version",
+        "status",
+        "summary_path",
+    }
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "ok"
+    assert payload["completed_task_ids"] == [
+        "capture-objective",
+        "draft-work-breakdown",
+        "draft-validation-checklist",
+        "publish-summary",
+    ]
+    assert payload["failed_task_ids"] == []
+    assert payload["blocked_task_ids"] == []
+    assert len(payload["artifact_paths"]) == 4
+    assert Path(payload["run_dir"]).exists()
+    assert Path(payload["plan_path"]).exists()
+    assert Path(payload["summary_path"]).exists()
+    assert Path(payload["event_log_path"]).exists()
+
+
+def test_planner_demo_json_returns_failure_payload(monkeypatch, tmp_path: Path, capsys) -> None:
+    async def failing_run_planner_demo(*, output_dir, **kwargs):
+        return await planner_demo.run_planner_demo(
+            output_dir=output_dir,
+            fail_task_id="draft-validation-checklist",
+            **kwargs,
+        )
+
+    monkeypatch.setattr(cli, "run_planner_demo", failing_run_planner_demo)
+
+    exit_code = main(["planner", "demo", "--json", "--output-dir", str(tmp_path)])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert set(payload) == {
+        "blocked_task_ids",
+        "event_log_path",
+        "failed_task_ids",
+        "message",
+        "plan_path",
+        "run_dir",
+        "scenario_name",
+        "schema_version",
+        "status",
+        "summary_path",
+    }
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "error"
+    assert payload["failed_task_ids"] == ["draft-validation-checklist"]
+    assert payload["blocked_task_ids"] == ["publish-summary"]
+    assert Path(payload["plan_path"]).exists()
+    assert Path(payload["summary_path"]).exists()
+    assert Path(payload["event_log_path"]).exists()
