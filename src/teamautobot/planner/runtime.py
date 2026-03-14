@@ -6,17 +6,21 @@ from pathlib import Path
 from ..agents import AgentRunError
 from ..artifacts import ArtifactStore
 from ..events import EventBus
-from .interfaces import TaskExecutor
+from .interfaces import TaskExecutionError, TaskExecutor
 from .models import (
     SUMMARY_MAX_LENGTH,
     DependencyHandoff,
     ExecutionSummary,
     PlannerRunResult,
     PlanSnapshot,
+    ReviewDecision,
+    ReviewResult,
     TaskGraph,
+    TaskKind,
     TaskRunRecord,
     TaskStatus,
 )
+from .review import ReviewContractError, resolve_review_subject
 from .validation import blocked_dependencies, ready_tasks, validate_task_graph
 
 
@@ -62,12 +66,14 @@ class TaskGraphRunner:
                 task_id=task.id,
                 order_index=task.order_index,
                 assignee=task.assignee,
+                task_kind=task.task_kind,
                 dependencies=task.dependencies,
                 status=TaskStatus.PENDING,
             )
             for task in graph.ordered_tasks()
         }
         handoffs: dict[str, DependencyHandoff] = {}
+        rejected_review_task_ids: set[str] = set()
 
         for task in graph.ordered_tasks():
             self._event_bus.emit(
@@ -79,11 +85,16 @@ class TaskGraphRunner:
                     "task_id": task.id,
                     "assignee": task.assignee,
                     "dependencies": list(task.dependencies),
+                    "task_kind": task.task_kind.value,
                 },
             )
 
         while True:
-            self._mark_blocked_tasks(graph, records)
+            self._mark_blocked_tasks(
+                graph,
+                records,
+                rejected_review_task_ids=rejected_review_task_ids,
+            )
             status_map = {task_id: record.status for task_id, record in records.items()}
             ready = ready_tasks(graph, status_map)
 
@@ -105,54 +116,83 @@ class TaskGraphRunner:
                 handoffs[dependency] for dependency in task.dependencies if dependency in handoffs
             )
 
+            if task.task_kind == TaskKind.REVIEW:
+                try:
+                    subject_handoff = resolve_review_subject(
+                        task_id=task.id,
+                        dependency_handoffs=dependency_handoffs,
+                    )
+                except ReviewContractError as exc:
+                    self._record_task_failure(
+                        records,
+                        task_id=task.id,
+                        message=str(exc),
+                        error_kind="review_contract",
+                    )
+                    continue
+                self._emit_review_requested(
+                    review_task_id=task.id,
+                    reviewer_id=task.assignee,
+                    subject_handoff=subject_handoff,
+                )
+
             try:
                 result = await self._task_executor.execute(task, dependency_handoffs)
-            except AgentRunError as exc:
-                records[task.id] = replace(
-                    records[task.id],
-                    status=TaskStatus.FAILED,
-                    message=exc.error.message,
-                )
-                self._event_bus.emit(
-                    "task.failed",
-                    source="planner",
-                    correlation_id=task.id,
-                    payload={"task_id": task.id, "message": exc.error.message},
+            except TaskExecutionError as exc:
+                self._record_task_failure(
+                    records,
+                    task_id=task.id,
+                    message=str(exc),
+                    error_kind=exc.error_kind,
+                    artifact_path=exc.artifact_path,
                 )
                 continue
+            except AgentRunError as exc:
+                self._record_task_failure(records, task_id=task.id, message=exc.error.message)
+                continue
             except Exception as exc:  # pragma: no cover - defensive branch
-                message = str(exc)
-                self._event_bus.emit(
-                    "system.error",
-                    source="planner",
-                    correlation_id=task.id,
-                    payload={"task_id": task.id, "kind": "unexpected", "message": message},
-                )
-                records[task.id] = replace(
-                    records[task.id],
-                    status=TaskStatus.FAILED,
-                    message=message,
-                )
-                self._event_bus.emit(
-                    "task.failed",
-                    source="planner",
-                    correlation_id=task.id,
-                    payload={"task_id": task.id, "message": message},
+                self._record_task_failure(
+                    records,
+                    task_id=task.id,
+                    message=str(exc),
+                    error_kind="unexpected",
                 )
                 continue
 
             summary = normalize_summary(result.assistant_text)
+            review_result = result.review_result
+            if task.task_kind == TaskKind.REVIEW and review_result is None:
+                self._record_task_failure(
+                    records,
+                    task_id=task.id,
+                    message=f"Review task {task.id} completed without a review result.",
+                    error_kind="review_contract",
+                    artifact_path=result.artifact_path,
+                )
+                continue
+
             records[task.id] = replace(
                 records[task.id],
                 status=TaskStatus.COMPLETED,
                 artifact_path=str(result.artifact_path),
                 summary=summary,
+                review_result=review_result,
             )
             handoffs[task.id] = DependencyHandoff(
                 task_id=task.id,
                 artifact_path=str(result.artifact_path),
                 summary=summary,
             )
+            if review_result is not None:
+                self._emit_review_outcome(
+                    graph=graph,
+                    review_task_id=task.id,
+                    reviewer_id=task.assignee,
+                    artifact_path=result.artifact_path,
+                    review_result=review_result,
+                )
+                if review_result.decision == ReviewDecision.REJECTED:
+                    rejected_review_task_ids.add(task.id)
 
         summary = ExecutionSummary(
             run_id=run_id,
@@ -205,25 +245,139 @@ class TaskGraphRunner:
             summary=summary,
         )
 
-    def _mark_blocked_tasks(self, graph: TaskGraph, records: dict[str, TaskRunRecord]) -> None:
+    def _record_task_failure(
+        self,
+        records: dict[str, TaskRunRecord],
+        *,
+        task_id: str,
+        message: str,
+        error_kind: str | None = None,
+        artifact_path: Path | None = None,
+    ) -> None:
+        if error_kind is not None:
+            self._event_bus.emit(
+                "system.error",
+                source="planner",
+                correlation_id=task_id,
+                payload={"task_id": task_id, "kind": error_kind, "message": message},
+            )
+        records[task_id] = replace(
+            records[task_id],
+            status=TaskStatus.FAILED,
+            message=message,
+            artifact_path=str(artifact_path) if artifact_path is not None else None,
+        )
+        self._event_bus.emit(
+            "task.failed",
+            source="planner",
+            correlation_id=task_id,
+            payload={"task_id": task_id, "message": message},
+        )
+
+    def _emit_review_requested(
+        self,
+        *,
+        review_task_id: str,
+        reviewer_id: str,
+        subject_handoff: DependencyHandoff,
+    ) -> None:
+        self._event_bus.emit(
+            "review.requested",
+            source="planner",
+            target=reviewer_id,
+            correlation_id=review_task_id,
+            payload={
+                "review_task_id": review_task_id,
+                "subject_task_id": subject_handoff.task_id,
+                "subject_artifact_path": subject_handoff.artifact_path,
+            },
+        )
+
+    def _emit_review_outcome(
+        self,
+        *,
+        graph: TaskGraph,
+        review_task_id: str,
+        reviewer_id: str,
+        artifact_path: Path,
+        review_result: ReviewResult,
+    ) -> None:
+        subject_task = graph.task_by_id(review_result.subject_task_id)
+        shared_payload = {
+            "review_task_id": review_task_id,
+            "subject_task_id": review_result.subject_task_id,
+            "review_artifact_path": str(artifact_path),
+        }
+        feedback_items = [item.to_dict() for item in review_result.feedback_items]
+
+        self._event_bus.emit(
+            "review.feedback",
+            source=reviewer_id,
+            target=subject_task.assignee,
+            correlation_id=review_task_id,
+            payload={
+                **shared_payload,
+                "decision": review_result.decision.value,
+                "feedback_items": feedback_items,
+            },
+        )
+
+        if review_result.decision == ReviewDecision.APPROVED:
+            self._event_bus.emit(
+                "review.approved",
+                source=reviewer_id,
+                target=subject_task.assignee,
+                correlation_id=review_task_id,
+                payload=shared_payload,
+            )
+            return
+
+        self._event_bus.emit(
+            "review.rejected",
+            source=reviewer_id,
+            target=subject_task.assignee,
+            correlation_id=review_task_id,
+            payload={**shared_payload, "feedback_items": feedback_items},
+        )
+
+    def _mark_blocked_tasks(
+        self,
+        graph: TaskGraph,
+        records: dict[str, TaskRunRecord],
+        *,
+        rejected_review_task_ids: set[str],
+    ) -> None:
         status_map = {task_id: record.status for task_id, record in records.items()}
         for task in graph.ordered_tasks():
             record = records[task.id]
             if record.status != TaskStatus.PENDING:
                 continue
 
-            blocked_by = blocked_dependencies(task, status_map)
-            if not blocked_by:
+            blocked_by = list(blocked_dependencies(task, status_map))
+            rejected_by = [
+                dependency
+                for dependency in task.dependencies
+                if dependency in rejected_review_task_ids
+            ]
+            blockers = list(dict.fromkeys(blocked_by + rejected_by))
+            if not blockers:
                 continue
+
+            if rejected_by and not blocked_by:
+                message = f"Blocked by rejected review dependencies: {', '.join(blockers)}"
+            elif blocked_by and not rejected_by:
+                message = f"Blocked by failed dependencies: {', '.join(blockers)}"
+            else:
+                message = f"Blocked by failed or rejected dependencies: {', '.join(blockers)}"
 
             records[task.id] = replace(
                 record,
                 status=TaskStatus.BLOCKED,
-                message=f"Blocked by failed dependencies: {', '.join(blocked_by)}",
+                message=message,
             )
             self._event_bus.emit(
                 "task.blocked",
                 source="planner",
                 correlation_id=task.id,
-                payload={"task_id": task.id, "blocked_by": list(blocked_by)},
+                payload={"task_id": task.id, "blocked_by": blockers},
             )

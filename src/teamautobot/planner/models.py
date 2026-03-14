@@ -16,6 +16,16 @@ class TaskStatus(StrEnum):
     BLOCKED = "blocked"
 
 
+class TaskKind(StrEnum):
+    WORK = "work"
+    REVIEW = "review"
+
+
+class ReviewDecision(StrEnum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 @dataclass(frozen=True, slots=True)
 class DependencyHandoff:
     task_id: str
@@ -31,12 +41,78 @@ class DependencyHandoff:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewFeedbackItem:
+    message: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"message": self.message}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> ReviewFeedbackItem:
+        message = payload.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("Review feedback items must include a non-empty message.")
+        return cls(message=message)
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewResult:
+    subject_task_id: str
+    decision: ReviewDecision
+    summary: str
+    feedback_items: tuple[ReviewFeedbackItem, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "subject_task_id": self.subject_task_id,
+            "decision": self.decision.value,
+            "summary": self.summary,
+            "feedback_items": [item.to_dict() for item in self.feedback_items],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> ReviewResult:
+        subject_task_id = payload.get("subject_task_id")
+        decision_value = payload.get("decision")
+        summary = payload.get("summary")
+        feedback_payload = payload.get("feedback_items", [])
+
+        if not isinstance(subject_task_id, str) or not subject_task_id.strip():
+            raise ValueError("Review results must include a non-empty subject_task_id.")
+        if not isinstance(decision_value, str):
+            raise ValueError("Review results must include a string decision.")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("Review results must include a non-empty summary.")
+        if not isinstance(feedback_payload, list):
+            raise ValueError("Review results must include feedback_items as a list.")
+
+        try:
+            decision = ReviewDecision(decision_value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid review decision: {decision_value}") from exc
+
+        feedback_items: list[ReviewFeedbackItem] = []
+        for item in feedback_payload:
+            if not isinstance(item, dict):
+                raise ValueError("Each review feedback item must be an object.")
+            feedback_items.append(ReviewFeedbackItem.from_dict(item))
+
+        return cls(
+            subject_task_id=subject_task_id,
+            decision=decision,
+            summary=summary,
+            feedback_items=tuple(feedback_items),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedTask:
     id: str
     description: str
     assignee: str
     order_index: int
     dependencies: tuple[str, ...] = ()
+    task_kind: TaskKind = TaskKind.WORK
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -45,6 +121,7 @@ class PlannedTask:
             "assignee": self.assignee,
             "order_index": self.order_index,
             "dependencies": list(self.dependencies),
+            "task_kind": self.task_kind.value,
         }
 
 
@@ -92,22 +169,26 @@ class TaskRunRecord:
     task_id: str
     order_index: int
     assignee: str
+    task_kind: TaskKind
     dependencies: tuple[str, ...]
     status: TaskStatus
     artifact_path: str | None = None
     message: str | None = None
     summary: str | None = None
+    review_result: ReviewResult | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
             "task_id": self.task_id,
             "order_index": self.order_index,
             "assignee": self.assignee,
+            "task_kind": self.task_kind.value,
             "dependencies": list(self.dependencies),
             "status": self.status.value,
             "artifact_path": self.artifact_path,
             "message": self.message,
             "summary": self.summary,
+            "review_result": self.review_result.to_dict() if self.review_result else None,
         }
 
 
@@ -145,6 +226,7 @@ class TaskExecutionOutput:
     artifact_path: Path
     assistant_text: str
     tool_names: tuple[str, ...] = ()
+    review_result: ReviewResult | None = None
 
 
 @dataclass(frozen=True, slots=True)

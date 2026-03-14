@@ -56,6 +56,7 @@ class SingleTaskAgent:
         task: AgentTask,
         *,
         selection: ModelSelection | None = None,
+        emit_completion_event: bool = True,
     ) -> AgentRunResult:
         self._event_bus.emit(
             "task.started",
@@ -161,12 +162,13 @@ class SingleTaskAgent:
             correlation_id=task.id,
             payload={"task_id": task.id, "artifact_path": str(artifact.path)},
         )
-        self._event_bus.emit(
-            "task.completed",
-            source=self._agent_id,
-            correlation_id=task.id,
-            payload={"task_id": task.id, "artifact_path": str(artifact.path)},
-        )
+        if emit_completion_event:
+            self._event_bus.emit(
+                "task.completed",
+                source=self._agent_id,
+                correlation_id=task.id,
+                payload={"task_id": task.id, "artifact_path": str(artifact.path)},
+            )
 
         return AgentRunResult(
             task=task,

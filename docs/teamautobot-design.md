@@ -205,6 +205,14 @@ Each agent is a **stateful, tool-wielding process** with a persistent identity.
 | Reviewer | File reading, diff viewer, static analysis runner, test runner, coverage checker, agent messaging |
 | Writer | File read/write, doc generation, link checking, agent messaging |
 
+**Tool capability boundary**:
+
+- Persona tool lists describe **capability categories**, not unrestricted raw access to the host environment.
+- TeamAutobot should own a **tool execution boundary** that mediates permissions, timeouts, cancellation, auditability, and artifact/event capture for every tool invocation.
+- That boundary should be able to support both **native adapters** (for example file I/O, repository search, bash/python execution, tests, linters, and web fetch/search) and **MCP-backed adapters** behind the same internal interface.
+- Tool use should remain harnessable: deterministic test doubles and non-interactive CLI/batch paths should exist alongside any interactive usage.
+- Tool outputs, failures, and side effects should be visible in the event log and recoverable enough to support replay/debugging and future resumability.
+
 **Agent Memory Model**:
 - **Working memory**: Current task, recent actions, pending questions (cleared per task)
 - **Session memory**: Summarized history of all tasks completed this run (persists across tasks)
@@ -584,6 +592,36 @@ Events appended to a JSONL file. Agents poll or use file watchers.
 
 ---
 
+### 4.6 Tooling & Execution Boundary
+
+**Status**: 🔴 OPEN
+
+**Why it matters**: TeamAutobot's long-term usefulness depends on agents being able to interact with the real environment safely and observably, not just produce text. That includes reading and writing repository files, executing bash or python commands, running tests and linters, performing web searches/fetches, and potentially using external tool ecosystems exposed through MCP.
+
+**Required capability categories**:
+- repository and file read/write
+- repository search, diff, and status inspection
+- bash/python or other command execution
+- test, lint, format, and validation runners
+- web fetch/search and documentation lookup
+- optional external tool servers such as MCP integrations
+
+**Recommended direction**:
+- Keep a **TeamAutobot-owned internal tool interface** and execution policy layer.
+- Treat native tool implementations and MCP-backed tools as **adapters**, not as the owning abstraction for agent behavior.
+- Enforce persona-aware permissions, explicit allowlists/deny rules, timeout budgets, and cancellation through the TeamAutobot layer rather than scattering those rules across agents.
+- Emit structured events and persist enough metadata/artifacts to make tool use observable, testable, and eventually resumable.
+- Preserve a harness-first approach so important tool workflows can be exercised through deterministic tests and CLI/batch scenarios, not only live interactive runs.
+
+**Open questions**:
+- [ ] Which tool capabilities are mandatory for the first live autonomous objective, and which can wait?
+- [ ] How should permission policy be expressed: by persona, objective, environment, or all three?
+- [ ] What isolation model is required for shell/python execution?
+- [ ] How much of a tool invocation should be persisted for replay, audit, and resume?
+- [ ] Which integrations should be native first, and which should enter via MCP adapters?
+
+---
+
 ## 5. Retained From v1
 
 These v1 concepts carry forward into v2:
@@ -661,6 +699,7 @@ Decisions that require deep-dive evaluation before Phase 1 can begin:
 | D6 | Python version | 3.11+ (current) vs. 3.12+ | 🟢 LOW RISK | 3.12+ for better asyncio and typing |
 | D7 | Testing strategy | How to test multi-agent interactions | 🔴 OPEN | Need deterministic replay for CI |
 | D8 | Objective format | Keep v1 format vs. enhance | 🟡 LEANING | Keep format, extend frontmatter schema |
+| D9 | Tool execution boundary | Native-only vs. adapter layer vs. MCP-capable hybrid | 🔴 OPEN | Must support file I/O, shell/python, web, and optional MCP-backed tools behind TeamAutobot-owned interfaces |
 
 ---
 

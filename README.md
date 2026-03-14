@@ -29,6 +29,8 @@ uv run python src/app.py                     # defaults to status; also accepts 
 uv run python -m teamautobot.cli status --json
 uv run python -m teamautobot.cli demo --json # writes a per-run artifact + events under .teamautobot/demo-runs/
 uv run python -m teamautobot.cli planner demo --json # writes a per-run plan + artifacts + events under .teamautobot/planner-runs/
+uv run python -m teamautobot.cli planner review-demo --json # runs the builder-reviewer review gate demo
+uv run python -m teamautobot.cli planner review-demo --json --review-decision rejected # exercises the rejection path deterministically
 uv run python -m teamautobot.cli azure-openai status --json
 uv run python -m teamautobot.cli azure-openai complete --input "Say hello" --model gpt-4.1-nano --json
 uv sync --group dev                              # install dev tools

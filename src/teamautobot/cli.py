@@ -14,7 +14,8 @@ from .environment import load_env
 from .llm import LLMRequest, ModelSelection
 from .llm.azure_openai import AzureOpenAIResponsesClient, resolve_azure_openai_config
 from .planner.demo import DEFAULT_OUTPUT_DIR as DEFAULT_PLANNER_OUTPUT_DIR
-from .planner.demo import run_planner_demo
+from .planner.demo import run_planner_demo, run_review_demo
+from .planner.models import ReviewDecision
 
 DEFAULT_DEMO_OUTPUT_DIR = Path(".teamautobot/demo-runs")
 
@@ -93,6 +94,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Base directory where planner demo run outputs are written",
     )
     planner_demo_parser.add_argument("--json", action="store_true", help="Emit JSON")
+    planner_review_demo_parser = planner_subparsers.add_parser(
+        "review-demo",
+        help="Run the deterministic builder-reviewer review-gate demo",
+    )
+    planner_review_demo_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_PLANNER_OUTPUT_DIR,
+        help="Base directory where planner review-demo run outputs are written",
+    )
+    planner_review_demo_parser.add_argument(
+        "--review-decision",
+        choices=[decision.value for decision in ReviewDecision],
+        default=ReviewDecision.APPROVED.value,
+        help="Deterministic review outcome to simulate in the review-gate demo",
+    )
+    planner_review_demo_parser.add_argument("--json", action="store_true", help="Emit JSON")
     return parser
 
 
@@ -189,6 +207,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "planner":
         if args.planner_command == "demo":
             payload = asyncio.run(run_planner_demo(output_dir=args.output_dir))
+            _print(payload, as_json=args.json)
+            return 0 if payload["status"] == "ok" else 1
+        if args.planner_command == "review-demo":
+            payload = asyncio.run(
+                run_review_demo(
+                    output_dir=args.output_dir,
+                    review_decision=ReviewDecision(args.review_decision),
+                )
+            )
             _print(payload, as_json=args.json)
             return 0 if payload["status"] == "ok" else 1
 

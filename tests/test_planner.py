@@ -10,12 +10,18 @@ from teamautobot.artifacts import ArtifactStore
 from teamautobot.events import EventBus, JsonlEventStore
 from teamautobot.planner import (
     SCHEMA_VERSION,
+    DependencyHandoff,
     PlannedTask,
+    ReviewContractError,
+    ReviewDecision,
+    ReviewResult,
     TaskExecutionOutput,
     TaskGraph,
     TaskGraphRunner,
     TaskGraphValidationError,
     ready_tasks,
+    run_review_demo,
+    validate_review_result,
     validate_task_graph,
 )
 from teamautobot.planner.demo import run_planner_demo
@@ -104,6 +110,55 @@ def test_ready_tasks_use_order_index_instead_of_tuple_position() -> None:
         "capture-objective",
         "draft-work-breakdown",
     ]
+
+
+def test_validate_review_result_requires_matching_single_subject_handoff() -> None:
+    with pytest.raises(ReviewContractError, match="requires exactly one dependency handoff"):
+        validate_review_result(
+            task_id="review-slice",
+            dependency_handoffs=(),
+            review_result=ReviewResult(
+                subject_task_id="implement-slice",
+                decision=ReviewDecision.APPROVED,
+                summary="Approved the builder slice for publishing.",
+            ),
+        )
+
+    with pytest.raises(ReviewContractError, match="expected implement-slice"):
+        validate_review_result(
+            task_id="review-slice",
+            dependency_handoffs=(
+                DependencyHandoff(
+                    task_id="implement-slice",
+                    artifact_path="artifacts/tasks/implement-slice.json",
+                    summary="Built the slice.",
+                ),
+            ),
+            review_result=ReviewResult(
+                subject_task_id="capture-objective",
+                decision=ReviewDecision.APPROVED,
+                summary="Approved the builder slice for publishing.",
+            ),
+        )
+
+
+def test_validate_review_result_requires_feedback_for_rejection() -> None:
+    with pytest.raises(ReviewContractError, match="must include at least one feedback item"):
+        validate_review_result(
+            task_id="review-slice",
+            dependency_handoffs=(
+                DependencyHandoff(
+                    task_id="implement-slice",
+                    artifact_path="artifacts/tasks/implement-slice.json",
+                    summary="Built the slice.",
+                ),
+            ),
+            review_result=ReviewResult(
+                subject_task_id="implement-slice",
+                decision=ReviewDecision.REJECTED,
+                summary="Rejected the builder slice.",
+            ),
+        )
 
 
 def test_run_planner_demo_writes_versioned_artifacts_and_handoffs(
@@ -272,3 +327,171 @@ def test_task_graph_runner_preserves_explicit_run_dir_and_actual_artifact_paths(
         actual_artifact_root / "capture-objective-result.json",
         actual_artifact_root / "publish-summary-result.json",
     )
+
+
+def test_run_review_demo_approval_emits_review_events_and_publishes_summary(
+    tmp_path: Path,
+) -> None:
+    payload = asyncio.run(run_review_demo(output_dir=tmp_path))
+
+    assert payload["status"] == "ok"
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["review_status"] == "approved"
+    assert payload["review_task_id"] == "review-slice"
+    assert payload["reviewed_task_id"] == "implement-slice"
+    assert payload["feedback_count"] == 0
+    assert payload["completed_task_ids"] == [
+        "capture-objective",
+        "implement-slice",
+        "review-slice",
+        "publish-summary",
+    ]
+    assert payload["failed_task_ids"] == []
+    assert payload["blocked_task_ids"] == []
+
+    run_dir = Path(str(payload["run_dir"]))
+    summary_payload = _read_json(Path(str(payload["summary_path"])))
+    events = _read_events(Path(str(payload["event_log_path"])))
+    task_artifact_names = sorted(path.name for path in (run_dir / "artifacts" / "tasks").iterdir())
+
+    assert task_artifact_names == [
+        "capture-objective.json",
+        "implement-slice.json",
+        "publish-summary.json",
+        "review-slice.json",
+    ]
+    assert Path(str(payload["review_artifact_path"])).exists()
+    assert str(payload["review_artifact_path"]) in payload["artifact_paths"]
+    assert summary_payload["failed_count"] == 0
+    assert summary_payload["blocked_count"] == 0
+
+    event_types = [event["type"] for event in events]
+    review_requested_index = event_types.index("review.requested")
+    review_approved_index = event_types.index("review.approved")
+    assert event_types[review_requested_index : review_approved_index + 1] == [
+        "review.requested",
+        "task.started",
+        "tool.called",
+        "tool.completed",
+        "artifact.created",
+        "task.completed",
+        "review.feedback",
+        "review.approved",
+    ]
+
+    review_feedback = next(event for event in events if event["type"] == "review.feedback")
+    review_approved = next(event for event in events if event["type"] == "review.approved")
+    assert review_feedback["correlation_id"] == "review-slice"
+    assert review_feedback["payload"]["decision"] == "approved"
+    assert review_feedback["payload"]["feedback_items"] == []
+    assert review_feedback["source"] == "reviewer"
+    assert review_feedback["target"] == "builder"
+    assert review_approved["payload"]["review_artifact_path"] == payload["review_artifact_path"]
+
+
+def test_run_review_demo_rejection_blocks_publish_and_returns_structured_error(
+    tmp_path: Path,
+) -> None:
+    payload = asyncio.run(
+        run_review_demo(
+            output_dir=tmp_path,
+            review_decision=ReviewDecision.REJECTED,
+        )
+    )
+
+    assert payload["status"] == "error"
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["review_status"] == "rejected"
+    assert payload["review_task_id"] == "review-slice"
+    assert payload["reviewed_task_id"] == "implement-slice"
+    assert payload["feedback_count"] == 1
+    assert payload["completed_task_ids"] == [
+        "capture-objective",
+        "implement-slice",
+        "review-slice",
+    ]
+    assert payload["failed_task_ids"] == []
+    assert payload["blocked_task_ids"] == ["publish-summary"]
+    assert str(payload["review_artifact_path"]) in payload["artifact_paths"]
+
+    run_dir = Path(str(payload["run_dir"]))
+    summary_payload = _read_json(Path(str(payload["summary_path"])))
+    events = _read_events(Path(str(payload["event_log_path"])))
+    task_artifact_names = sorted(path.name for path in (run_dir / "artifacts" / "tasks").iterdir())
+    review_record = next(
+        record for record in summary_payload["task_records"] if record["task_id"] == "review-slice"
+    )
+
+    assert task_artifact_names == [
+        "capture-objective.json",
+        "implement-slice.json",
+        "review-slice.json",
+    ]
+    assert review_record["status"] == "completed"
+    assert review_record["review_result"]["decision"] == "rejected"
+    assert review_record["review_result"]["feedback_items"] == [
+        {"message": "Add explicit validation evidence before publishing the summary."}
+    ]
+    assert summary_payload["failed_count"] == 0
+    assert summary_payload["blocked_count"] == 1
+
+    event_types = [event["type"] for event in events]
+    review_requested_index = event_types.index("review.requested")
+    task_blocked_index = event_types.index("task.blocked")
+    assert event_types[review_requested_index : task_blocked_index + 1] == [
+        "review.requested",
+        "task.started",
+        "tool.called",
+        "tool.completed",
+        "artifact.created",
+        "task.completed",
+        "review.feedback",
+        "review.rejected",
+        "task.blocked",
+    ]
+
+    review_feedback = next(event for event in events if event["type"] == "review.feedback")
+    review_rejected = next(event for event in events if event["type"] == "review.rejected")
+    blocked_event = next(event for event in events if event["type"] == "task.blocked")
+    assert review_feedback["correlation_id"] == "review-slice"
+    assert review_feedback["payload"]["decision"] == "rejected"
+    assert review_feedback["payload"]["feedback_items"] == [
+        {"message": "Add explicit validation evidence before publishing the summary."}
+    ]
+    assert review_feedback["source"] == "reviewer"
+    assert review_feedback["target"] == "builder"
+    assert review_rejected["payload"]["review_artifact_path"] == payload["review_artifact_path"]
+    assert blocked_event["payload"]["blocked_by"] == ["review-slice"]
+
+
+def test_run_review_demo_invalid_review_fails_without_review_task_completed_event(
+    tmp_path: Path,
+) -> None:
+    payload = asyncio.run(run_review_demo(output_dir=tmp_path, invalid_review_result=True))
+
+    assert payload["status"] == "error"
+    assert payload["failed_task_ids"] == ["review-slice"]
+    assert payload["blocked_task_ids"] == ["publish-summary"]
+
+    summary_payload = _read_json(Path(str(payload["summary_path"])))
+    events = _read_events(Path(str(payload["event_log_path"])))
+    review_record = next(
+        record for record in summary_payload["task_records"] if record["task_id"] == "review-slice"
+    )
+    review_events = [event for event in events if event["correlation_id"] == "review-slice"]
+    review_requested_index = next(
+        index for index, event in enumerate(review_events) if event["type"] == "review.requested"
+    )
+
+    assert Path(str(review_record["artifact_path"])).name == "review-slice.json"
+    assert review_record["status"] == "failed"
+    assert review_record["review_result"] is None
+    assert [event["type"] for event in review_events[review_requested_index:]] == [
+        "review.requested",
+        "task.started",
+        "tool.called",
+        "tool.completed",
+        "artifact.created",
+        "system.error",
+        "task.failed",
+    ]

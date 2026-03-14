@@ -269,3 +269,95 @@ def test_planner_demo_json_returns_failure_payload(monkeypatch, tmp_path: Path, 
     assert Path(payload["plan_path"]).exists()
     assert Path(payload["summary_path"]).exists()
     assert Path(payload["event_log_path"]).exists()
+
+
+def test_planner_review_demo_json_returns_approved_payload(tmp_path: Path, capsys) -> None:
+    exit_code = main(["planner", "review-demo", "--json", "--output-dir", str(tmp_path)])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert set(payload) == {
+        "artifact_paths",
+        "blocked_task_ids",
+        "completed_task_ids",
+        "event_log_path",
+        "failed_task_ids",
+        "feedback_count",
+        "plan_path",
+        "review_artifact_path",
+        "review_status",
+        "review_task_id",
+        "reviewed_task_id",
+        "run_dir",
+        "scenario_name",
+        "schema_version",
+        "status",
+        "summary_path",
+    }
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "ok"
+    assert payload["review_status"] == "approved"
+    assert payload["review_task_id"] == "review-slice"
+    assert payload["reviewed_task_id"] == "implement-slice"
+    assert payload["feedback_count"] == 0
+    assert payload["completed_task_ids"] == [
+        "capture-objective",
+        "implement-slice",
+        "review-slice",
+        "publish-summary",
+    ]
+    assert payload["failed_task_ids"] == []
+    assert payload["blocked_task_ids"] == []
+    assert Path(payload["review_artifact_path"]).exists()
+    assert payload["review_artifact_path"] in payload["artifact_paths"]
+
+
+def test_planner_review_demo_json_returns_rejection_payload(tmp_path: Path, capsys) -> None:
+    exit_code = main(
+        [
+            "planner",
+            "review-demo",
+            "--json",
+            "--output-dir",
+            str(tmp_path),
+            "--review-decision",
+            "rejected",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert set(payload) == {
+        "artifact_paths",
+        "blocked_task_ids",
+        "completed_task_ids",
+        "event_log_path",
+        "failed_task_ids",
+        "feedback_count",
+        "message",
+        "plan_path",
+        "review_artifact_path",
+        "review_status",
+        "review_task_id",
+        "reviewed_task_id",
+        "run_dir",
+        "scenario_name",
+        "schema_version",
+        "status",
+        "summary_path",
+    }
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "error"
+    assert payload["review_status"] == "rejected"
+    assert payload["review_task_id"] == "review-slice"
+    assert payload["reviewed_task_id"] == "implement-slice"
+    assert payload["feedback_count"] == 1
+    assert payload["completed_task_ids"] == [
+        "capture-objective",
+        "implement-slice",
+        "review-slice",
+    ]
+    assert payload["failed_task_ids"] == []
+    assert payload["blocked_task_ids"] == ["publish-summary"]
+    assert Path(payload["review_artifact_path"]).exists()
+    assert payload["review_artifact_path"] in payload["artifact_paths"]

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from .interfaces import Planner
-from .models import PlannedTask, TaskGraph
+from .models import PlannedTask, TaskGraph, TaskKind
 from .validation import validate_task_graph
 
 DEMO_SCENARIO_NAME = "planner-demo"
+REVIEW_DEMO_SCENARIO_NAME = "planner-review-demo"
 
 
 class StaticPlanner(Planner):
@@ -44,6 +45,50 @@ class StaticPlanner(Planner):
                     assignee="writer",
                     order_index=4,
                     dependencies=("draft-work-breakdown", "draft-validation-checklist"),
+                ),
+            ),
+        )
+        validate_task_graph(graph)
+        return graph
+
+
+class ReviewGateStaticPlanner(Planner):
+    def __init__(self, *, scenario_name: str = REVIEW_DEMO_SCENARIO_NAME) -> None:
+        self._scenario_name = scenario_name
+
+    def build_plan(self) -> TaskGraph:
+        graph = TaskGraph(
+            scenario_name=self._scenario_name,
+            tasks=(
+                PlannedTask(
+                    id="capture-objective",
+                    description="Capture the approved objective for the collaboration slice.",
+                    assignee="ba",
+                    order_index=1,
+                ),
+                PlannedTask(
+                    id="implement-slice",
+                    description=(
+                        "Implement a deterministic builder slice from the captured objective."
+                    ),
+                    assignee="builder",
+                    order_index=2,
+                    dependencies=("capture-objective",),
+                ),
+                PlannedTask(
+                    id="review-slice",
+                    description="Review the builder output and return a machine-readable verdict.",
+                    assignee="reviewer",
+                    order_index=3,
+                    dependencies=("implement-slice",),
+                    task_kind=TaskKind.REVIEW,
+                ),
+                PlannedTask(
+                    id="publish-summary",
+                    description="Publish the collaboration summary after review approval.",
+                    assignee="writer",
+                    order_index=4,
+                    dependencies=("review-slice",),
                 ),
             ),
         )
