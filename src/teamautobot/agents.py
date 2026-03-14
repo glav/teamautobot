@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .artifacts import Artifact, ArtifactStore
@@ -14,6 +14,7 @@ from .tools import ToolExecutionResult, ToolRegistry
 class AgentTask:
     id: str
     description: str
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,14 +61,26 @@ class SingleTaskAgent:
             "task.started",
             source=self._agent_id,
             correlation_id=task.id,
-            payload={"task_id": task.id, "description": task.description},
+            payload={
+                "task_id": task.id,
+                "description": task.description,
+                "context": task.context,
+            },
         )
 
         initial_payload = json.dumps(
-            {"task": {"id": task.id, "description": task.description}},
+            {
+                "task": {
+                    "id": task.id,
+                    "description": task.description,
+                    "context": task.context,
+                }
+            },
             sort_keys=True,
         )
-        initial_response = await self._complete_once(initial_payload, selection)
+        initial_response = await self._complete_once(
+            task_id=task.id, payload=initial_payload, selection=selection
+        )
 
         tool_results: list[ToolExecutionResult] = []
         for tool_call in initial_response.tool_calls:
@@ -99,7 +112,11 @@ class SingleTaskAgent:
         if tool_results:
             followup_payload = json.dumps(
                 {
-                    "task": {"id": task.id, "description": task.description},
+                    "task": {
+                        "id": task.id,
+                        "description": task.description,
+                        "context": task.context,
+                    },
                     "tool_results": [
                         {
                             "tool_name": result.tool_name,
@@ -111,11 +128,17 @@ class SingleTaskAgent:
                 },
                 sort_keys=True,
             )
-            final_response = await self._complete_once(followup_payload, selection)
+            final_response = await self._complete_once(
+                task_id=task.id, payload=followup_payload, selection=selection
+            )
             final_text = final_response.text
 
         artifact_payload: dict[str, Any] = {
-            "task": {"id": task.id, "description": task.description},
+            "task": {
+                "id": task.id,
+                "description": task.description,
+                "context": task.context,
+            },
             "agent_id": self._agent_id,
             "assistant_text": final_text,
             "tool_results": [
@@ -154,7 +177,9 @@ class SingleTaskAgent:
             event_count=len(self._event_bus.events),
         )
 
-    async def _complete_once(self, payload: str, selection: ModelSelection | None) -> Any:
+    async def _complete_once(
+        self, *, task_id: str, payload: str, selection: ModelSelection | None
+    ) -> Any:
         request = LLMRequest(
             instructions=self._instructions,
             input=payload,
@@ -166,7 +191,12 @@ class SingleTaskAgent:
             self._event_bus.emit(
                 "system.error",
                 source=self._agent_id,
-                payload={"kind": result.error.kind, "message": result.error.message},
+                correlation_id=task_id,
+                payload={
+                    "task_id": task_id,
+                    "kind": result.error.kind,
+                    "message": result.error.message,
+                },
             )
             raise AgentRunError(result.error)
         assert result.response is not None

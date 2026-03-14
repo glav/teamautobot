@@ -87,6 +87,6 @@ The existing user model is defined in src/models/user.py.
 ## Notes
 
 - **Stage configuration**: The workflow stages (agents, artifacts, exit criteria) are defined in `stages.yaml`. See README.md for customization options.
-- **Artifacts**: Generated artifacts will be saved to `.teambot/{feature-name}/` directory, where `{feature-name}` is derived from your objective title (1-3 words, dash-separated). For the example above, this would be `.teambot/user-authentication/`.
+- **Artifacts**: Generated artifacts will be saved to `.teamautobot/{feature-name}/` directory, where `{feature-name}` is derived from your objective title (1-3 words, dash-separated). For the example above, this would be `.teamautobot/user-authentication/`.
 - **Parallel execution**: Multiple objectives can run in parallel since each gets its own feature directory.
 - **Resume**: If interrupted, resume with `uv run teambot run --resume`.

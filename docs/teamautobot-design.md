@@ -570,7 +570,7 @@ Events appended to a JSONL file. Agents poll or use file watchers.
 **Decision**: Keep CLI-first approach. Enhance observability.
 
 **Keep from v1**:
-- `teambot init` / `teambot run` / `teambot status` command structure
+- CLI-first `init` / `run` / `status` style command structure, without carrying forward the legacy `teambot` binary name as the TeamAutobot product name
 - Objective file input format (markdown with frontmatter)
 - Rich console output
 
@@ -595,8 +595,8 @@ These v1 concepts carry forward into v2:
 | Review loops | Fixed 4-iteration limit | Dynamic iteration until approval or escalation |
 | Git checkpoints | Commit after each stage | Commit after each meaningful milestone |
 | Resumability | JSON state file | Event log replay (richer, more granular) |
-| Artifact outputs | Markdown files in `.teambot/` | Same location, with added summaries |
-| CLI interface | init/run/status | Same commands, enhanced with dashboard and replay |
+| Artifact outputs | Markdown files in legacy `.teambot/` runtime directories | Runtime outputs and summaries under `.teamautobot/` |
+| CLI interface | Legacy `init` / `run` / `status` flow in TeamBot v1 | Keep analogous TeamAutobot CLI flows, enhanced with dashboard and replay |
 | Acceptance tests | pytest-based validation | Same approach, with smarter retry logic |
 
 ---

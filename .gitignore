@@ -12,5 +12,7 @@ __pycache__
 .ruff_cache/
 output
 .teambot/demo-runs/
+.teamautobot/demo-runs/
+.teamautobot/planner-runs/
 *.log
  git-credential-manager/

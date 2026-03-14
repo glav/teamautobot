@@ -13,8 +13,10 @@ from .demo import run_demo_task
 from .environment import load_env
 from .llm import LLMRequest, ModelSelection
 from .llm.azure_openai import AzureOpenAIResponsesClient, resolve_azure_openai_config
+from .planner.demo import DEFAULT_OUTPUT_DIR as DEFAULT_PLANNER_OUTPUT_DIR
+from .planner.demo import run_planner_demo
 
-DEFAULT_OUTPUT_DIR = Path(".teambot/demo-runs")
+DEFAULT_DEMO_OUTPUT_DIR = Path(".teamautobot/demo-runs")
 
 
 def _print(payload: dict[str, Any], *, as_json: bool) -> None:
@@ -42,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
+        default=DEFAULT_DEMO_OUTPUT_DIR,
         help="Base directory where TeamAutobot demo run outputs are written",
     )
     demo_parser.add_argument("--provider", default="demo", help="Provider name for model selection")
@@ -77,6 +79,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override AZURE_OPENAI_MODEL_DEPLOYMENT for this call",
     )
     azure_complete_parser.add_argument("--json", action="store_true", help="Emit JSON")
+
+    planner_parser = subparsers.add_parser("planner", help="Run planner demo flows")
+    planner_subparsers = planner_parser.add_subparsers(dest="planner_command", required=True)
+    planner_demo_parser = planner_subparsers.add_parser(
+        "demo",
+        help="Run the deterministic planner/task-graph demo",
+    )
+    planner_demo_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_PLANNER_OUTPUT_DIR,
+        help="Base directory where planner demo run outputs are written",
+    )
+    planner_demo_parser.add_argument("--json", action="store_true", help="Emit JSON")
     return parser
 
 
@@ -169,6 +185,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         _print(payload, as_json=args.json)
         return 0
+
+    if args.command == "planner":
+        if args.planner_command == "demo":
+            payload = asyncio.run(run_planner_demo(output_dir=args.output_dir))
+            _print(payload, as_json=args.json)
+            return 0 if payload["status"] == "ok" else 1
 
     if args.command == "azure-openai":
         if args.azure_command == "status":
